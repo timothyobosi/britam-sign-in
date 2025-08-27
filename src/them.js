@@ -11,10 +11,10 @@ export const theme = createTheme({
         MuiButton:{
             styleOverrides:{
                 root:{
-                    borderRadius: '',
-                    textTransform:'',
-                    fontSize:'',
-                    padding:''
+                    borderRadius: '8px',
+                    textTransform:'none',
+                    fontSize:'1rem',
+                    padding:'0.5rem 1rem'
                 },
             },
         },
@@ -23,9 +23,10 @@ export const theme = createTheme({
     MuiTextField:{
         styleOverrides:{
             root:{
-
-            }
-        }
-
+                '& .MuiOutlinedInput-root':{
+                    borderRadius:'4px'
+                },
+            },
+        },
     }
-})
+});
