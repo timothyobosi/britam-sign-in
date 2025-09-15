@@ -11,7 +11,9 @@ import other from './other';
 // ==============================|| MENU ITEMS ||============================== //
 
 const menuItems = {
-    items: [dashboard, application, forms, elements, samplePage, pages, utilities, support, other]
+    // Only show dashboard tab for now
+    items: [dashboard]
+    // items: [dashboard, application, forms, elements, samplePage, pages, utilities, support, other]
 };
 
 export default menuItems;

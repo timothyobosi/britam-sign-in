@@ -182,18 +182,7 @@ const MainRoutes = {
         </AuthGuard>
     ),
     children: [
-        {
-            path: '/widget/statistics',
-            element: <WidgetStatistics />
-        },
-        {
-            path: '/widget/data',
-            element: <WidgetData />
-        },
-        {
-            path: '/widget/chart',
-            element: <WidgetChart />
-        },
+        // Only dashboard tabs
 
         {
             path: '/apps/user/social-profile/:tab',
