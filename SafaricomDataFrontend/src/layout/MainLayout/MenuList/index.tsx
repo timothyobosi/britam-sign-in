@@ -1,5 +1,14 @@
 import { memo, useLayoutEffect, useState } from 'react';
 
+interface MenuItem {
+    id: string;
+    title: any;
+    icon?: any;
+    type: string;
+    children?: MenuItem[];
+    url?: string;
+}
+
 // material-ui
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
@@ -29,8 +38,10 @@ const MenuList = () => {
     const drawerOpen = menuMaster.isDashboardDrawerOpened;
     const isHorizontal = menuOrientation === MenuOrientation.HORIZONTAL && !downMD;
 
-    const [selectedID, setSelectedID] = useState('');
-    const [menuItems, setMenuItems] = useState({ items: [] });
+    const [selectedID, setSelectedID] = useState(() => {
+        return localStorage.getItem('sidebarSelectedID') || '';
+    });
+    const [menuItems, setMenuItems] = useState<{ items: MenuItem[] }>({ items: [] });
 
     let widgetMenu = Menu();
 
@@ -53,12 +64,17 @@ const MenuList = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [menuLoading]);
 
+    // Persist selectedID to localStorage whenever it changes
+    useLayoutEffect(() => {
+        localStorage.setItem('sidebarSelectedID', selectedID);
+    }, [selectedID]);
+
     // last menu-item to show in horizontal menu bar
     const lastItem = isHorizontal ? HORIZONTAL_MAX_ITEM : null;
 
-    let lastItemIndex = menuItems.items.length - 1;
-    let remItems;
-    let lastItemId;
+    let lastItemIndex: number = menuItems.items.length - 1;
+    let remItems: any[] = [];
+    let lastItemId: string | undefined;
 
     if (lastItem && lastItem < menuItems.items.length) {
         lastItemId = menuItems.items[lastItem - 1].id;
