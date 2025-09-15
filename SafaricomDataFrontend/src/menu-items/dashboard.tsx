@@ -19,7 +19,7 @@ const dashboard = {
     children: [
         {
             id: 'default',
-            title: <FormattedMessage id="default" />,
+            title: 'Course Outline',
             type: 'item',
             url: '/dashboard/default',
             icon: icons.IconDashboard,
@@ -27,7 +27,7 @@ const dashboard = {
         },
         {
             id: 'analytics',
-            title: <FormattedMessage id="analytics" />,
+            title: 'Test',
             type: 'item',
             url: '/dashboard/analytics',
             icon: icons.IconDeviceAnalytics,
