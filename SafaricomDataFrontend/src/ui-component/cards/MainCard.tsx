@@ -19,7 +19,22 @@ const headerSX = {
 
 // ==============================|| CUSTOM MAIN CARD ||============================== //
 
-const MainCard = React.forwardRef(
+export interface MainCardProps {
+    border?: boolean;
+    boxShadow?: boolean;
+    children?: React.ReactNode;
+    content?: boolean;
+    contentClass?: string;
+    contentSX?: object;
+    darkTitle?: boolean;
+    secondary?: React.ReactNode | string | number;
+    shadow?: string | number;
+    sx?: object;
+    title?: React.ReactNode | string | number;
+    [key: string]: any;
+}
+
+const MainCard = React.forwardRef<HTMLDivElement, MainCardProps>(
     (
         {
             border = false,

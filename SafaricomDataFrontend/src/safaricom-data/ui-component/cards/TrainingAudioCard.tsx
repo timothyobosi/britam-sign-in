@@ -1,12 +1,14 @@
 import PropTypes from 'prop-types';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '@mui/material/styles';
-import { Box, Button, Grid, Typography, CircularProgress, IconButton, Card, CardContent } from '@mui/material';
+import { Box, Button, Grid, Typography, CircularProgress, IconButton } from '@mui/material';
+import Collapse from '@mui/material/Collapse';
 import { FaPause, FaPlay, FaUndo } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
 import MainCard from 'ui-component/cards/MainCard';
 import SkeletonTotalOrderCard from 'ui-component/cards/Skeleton/EarningCard';
 import ReactH5AudioPlayer from 'react-h5-audio-player';
+import type { H5AudioPlayer } from 'react-h5-audio-player';
 import 'react-h5-audio-player/lib/styles.css';
 import * as authApi from 'safaricom-data/api/index';
 import JWTContext from 'contexts/JWTContext';
@@ -28,7 +30,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
   const [selectedModule, setSelectedModule] = useState<authApi.TrainingModule | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
-  const audioRef = useRef<{ audio: HTMLAudioElement } | null>(null);
+  const audioRef = useRef<H5AudioPlayer | null>(null);
   const [currentTime, setCurrentTime] = useState<number>(0);
 
   // Fetch all modules
@@ -118,7 +120,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   const handleClose = () => {
     if (audioRef.current) {
-      const watchedSeconds = Math.floor(audioRef.current.audio.currentTime);
+      const watchedSeconds = Math.floor(audioRef.current?.audio.currentTime || 0);
       if (token && selectedModule) {
         updateProgress(selectedModule.moduleId, watchedSeconds);
       }
@@ -130,7 +132,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   const handleRewind = () => {
     if (audioRef.current && audioRef.current.audio) {
-      audioRef.current.audio.currentTime = Math.max(0, audioRef.current.audio.currentTime - 10);
+      audioRef.current.audio.currentTime = Math.max(0, audioRef.current?.audio.currentTime - 10 || 0);
     }
   };
 
@@ -150,16 +152,12 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       border={false}
       content={false}
       sx={{
-        bgcolor: theme.palette.primary.dark,
-        color: '#fff',
         height: '100%',
         overflow: 'hidden',
-        position: 'relative',
-        '&:after': { content: '""', position: 'absolute', width: 210, height: 210, background: `linear-gradient(210.04deg, ${theme.palette.primary.main} -50.94%, rgba(144, 202, 249, 0) 83.49%)`, borderRadius: '50%', top: -30, right: -180 },
-        '&:before': { content: '""', position: 'absolute', width: 210, height: 210, background: `linear-gradient(140.9deg, ${theme.palette.primary.main} -14.02%, rgba(144, 202, 249, 0) 77.58%)`, borderRadius: '50%', top: -160, right: -130 }
+        position: 'relative'
       }}
     >
-      <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+  <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', backgroundColor: theme.palette.grey[100] }}>
         {audioError ? (
           <Typography color="error" align="center">{audioError}</Typography>
         ) : (
@@ -169,15 +167,25 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                 {modules.length > 0 ? (
                   modules.map((module) => (
                     <Grid item xs={12} sm={6} md={3} key={`module-${module.moduleId}`}>
-                      <Card onClick={() => handleModuleSelect(module.moduleId)} sx={{ cursor: 'pointer', '&:hover': { backgroundColor: theme.palette.action.hover } }}>
-                        <CardContent>
-                          <Typography variant="h6">Module {module.moduleId}</Typography>
-                          <Typography>{module.title}</Typography>
-                          <Typography>Duration: {module.duration} min</Typography>
-                          <Typography>Watch Time: {module.watchTime} sec</Typography>
-                          <Typography>Status: {module.status}</Typography>
-                        </CardContent>
-                      </Card>
+                      <MainCard title={`Module ${module.moduleId}`}
+                        sx={{
+                          cursor: 'pointer',
+                          border: '1px solid',
+                          borderColor: theme.palette.divider,
+                          backgroundColor: '#fff',
+                          transition: 'background 0.2s',
+                          '&:hover': { backgroundColor: theme.palette.action.hover }
+                        }}
+                        onClick={() => handleModuleSelect(module.moduleId)}
+                      >
+                        <Typography variant="h6">{module.title}</Typography>
+                        <Typography>Duration: {module.duration} min</Typography>
+                        <Typography>Watch Time: {module.watchTime} sec</Typography>
+                        <Typography>Status: {module.status}</Typography>
+                        {module.isComplete && (
+                          <Typography color="success.main">Completed!</Typography>
+                        )}
+                      </MainCard>
                     </Grid>
                   ))
                 ) : (
@@ -186,40 +194,57 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
               </Grid>
             ) : (
               selectedModule && (
-                <MainCard title={`Module ${selectedModule.moduleId} - ${selectedModule.title}`}>
-                  <ReactH5AudioPlayer
-                    ref={audioRef}
-                    src={`https://brm-partners.britam.com${selectedModule.filePath}`}
-                    onPlay={() => console.log('Playing')}
-                    onPause={() => {
-                      if (audioRef.current && audioRef.current.audio) {
-                        const watchedSeconds = Math.floor(audioRef.current.audio.currentTime);
+                <Collapse in={true} timeout={500}>
+                  <MainCard title={`Module ${selectedModule.moduleId} - ${selectedModule.title}`}
+                    sx={{ mb: 2 }}
+                  >
+                    <ReactH5AudioPlayer
+                      ref={audioRef}
+                      src={`https://brm-partners.britam.com${selectedModule.filePath}`}
+                      onPlay={() => console.log('Playing')}
+                      onPause={() => {
+                        if (audioRef.current && audioRef.current.audio) {
+                          const watchedSeconds = Math.floor(audioRef.current.audio.currentTime);
+                          if (token && selectedModule) {
+                            updateProgress(selectedModule.moduleId, watchedSeconds);
+                          }
+                        }
+                      }}
+                      onEnded={() => {
                         if (token && selectedModule) {
+                          const watchedSeconds = Math.floor(selectedModule.duration * 60);
                           updateProgress(selectedModule.moduleId, watchedSeconds);
                         }
-                      }
-                    }}
-                    onEnded={() => {
-                      if (token && selectedModule) {
-                        const watchedSeconds = Math.floor(selectedModule.duration * 60);
-                        updateProgress(selectedModule.moduleId, watchedSeconds);
-                      }
-                    }}
-                    listenInterval={1000}
-                    onListen={() => {
-                      if (audioRef.current && audioRef.current.audio) {
-                        setCurrentTime(audioRef.current.audio.currentTime);
-                      }
-                    }}
-                    customAdditionalControls={[]}
-                    customVolumeControls={[]}
-                    showJumpControls={false}
-                    showSkipControls={false}
-                  />
-                  <Typography>Duration: {selectedModule.duration} min</Typography>
-                  <Typography>Progress: {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60)} / {selectedModule.duration}:00</Typography>
-                  <Typography>Status: {selectedModule.status}</Typography>
-                </MainCard>
+                      }}
+                      listenInterval={1000}
+                      onListen={() => {
+                        if (audioRef.current && audioRef.current.audio) {
+                          setCurrentTime(audioRef.current.audio.currentTime);
+                        }
+                      }}
+                      customAdditionalControls={[]}
+                      customVolumeControls={[]}
+                      showJumpControls={false}
+                      showSkipControls={false}
+                    />
+                    <Typography>Duration: {selectedModule.duration} min</Typography>
+                    <Typography>Progress: {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60)} / {selectedModule.duration}:00</Typography>
+                    <Typography>Status: {selectedModule.status}</Typography>
+                    {selectedModule.isComplete ? (
+                      <Typography sx={{ mt: 2 }} color="success.main">Completed!</Typography>
+                    ) : null}
+                    <Button
+                      onClick={() => {
+                        setSelectedModuleId(null);
+                        setSelectedModule(null);
+                      }}
+                      variant="contained"
+                      sx={{ mt: 2 }}
+                    >
+                      Close
+                    </Button>
+                  </MainCard>
+                </Collapse>
               )
             )}
           </>
