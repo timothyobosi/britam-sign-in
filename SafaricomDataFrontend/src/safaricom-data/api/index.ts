@@ -1,3 +1,64 @@
+// -------------------- QUIZ API FUNCTIONS --------------------
+const QUIZ_BASE_URL = `${import.meta.env.VITE_API_TARGET}/api/Quiz`;
+
+export async function getQuizQuestions(token: string, moduleId: number): Promise<QuizQuestion[]> {
+  const res = await fetch(`${QUIZ_BASE_URL}/questions/${moduleId}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'Accept': '*/*',
+    },
+  });
+  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+  const data = await res.json();
+  return data;
+}
+
+export async function getQuizScore(token: string, agentId: number, moduleId: number): Promise<QuizScoreResponse> {
+  const res = await fetch(`${QUIZ_BASE_URL}/score/${agentId}/${moduleId}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'Accept': '*/*',
+    },
+  });
+  if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+  return res.json();
+}
+
+export interface SubmitQuizAnswer {
+  questionId: number;
+  selectedAnswer: number;
+}
+
+export async function submitQuizAnswers(
+  token: string,
+  agentId: number,
+  moduleId: number,
+  answers: SubmitQuizAnswer[]
+): Promise<{ status: string }> {
+  for (const { questionId, selectedAnswer } of answers) {
+    const res = await fetch(`${QUIZ_BASE_URL}/submit-answer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        agentId,
+        questionId,
+        selectedOptionId: selectedAnswer,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`HTTP error! status: ${res.status} - ${text}`);
+    }
+  }
+  return { status: 'Success' };
+}
 // TypeScript: declare ImportMeta.env for Vite
 // Training API types and functions
 export interface TrainingModule {
