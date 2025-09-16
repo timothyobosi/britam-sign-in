@@ -78,7 +78,7 @@ export interface TrainingModule {
 const BASE_URL = `${import.meta.env.VITE_API_TARGET}${import.meta.env.VITE_API_BASE_URL}`;
 const TRAINING_BASEURL = `${import.meta.env.VITE_API_TARGET}${import.meta.env.VITE_TRAINING_BASE_URL}`;
 
-export async function getAllTrainingModules(token: string): Promise<TrainingModule[]> {
+export async function getAllTrainingModules(token: string, agentId?: number): Promise<TrainingModule[]> {
   const res = await fetch(`${TRAINING_BASEURL}/all-modules`, {
     method: 'GET',
     headers: {
@@ -90,9 +90,9 @@ export async function getAllTrainingModules(token: string): Promise<TrainingModu
   const data = await res.json();
   console.log('Raw API data:', data); // Debug raw response
   return data.map((module: any) => {
-    // Find the latest progress for the current agent (agentId)
-    const agentProgress = module.trainingProgresses.find((progress: any) => progress.agentid === agentId);
-    const progress = agentProgress || module.trainingProgresses[0] || {}; // Fallback to first progress or empty object
+    // Find the latest progress for the current agent (agentId) if provided
+    const agentProgress = agentId ? module.trainingProgresses.find((progress: any) => progress.agentid === agentId) : module.trainingProgresses[0];
+    const progress = agentProgress || {}; // Fallback to empty object if no progress
     return {
       moduleId: module.moduleid, // Match the lowercase 'moduleid' from API
       title: module.title,

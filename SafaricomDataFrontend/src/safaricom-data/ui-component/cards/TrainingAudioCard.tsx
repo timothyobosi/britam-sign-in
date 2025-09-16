@@ -35,27 +35,27 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   // Fetch all modules
   useEffect(() => {
-    console.log('useEffect triggered for modules - agentId:', agentId, 'token:', token);
-    if (agentId && token) {
-      setIsLoading(true);
-      console.log('Fetching all modules...');
-      authApi.getAllTrainingModules(token)
-        .then((data: authApi.TrainingModule[]) => {
-          console.log('Modules data received:', data);
-          const sortedModules = data.sort((a: authApi.TrainingModule, b: authApi.TrainingModule) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId));
-          console.log('Sorted modules:', sortedModules);
-          setModules(sortedModules);
-        })
-        .catch((error: any) => {
-          console.error('Error fetching modules:', error);
-          setAudioError(`Failed to load modules: ${error.message}`);
-        })
-        .finally(() => setIsLoading(false));
-    } else {
-      console.log('No valid agentId or token');
-      setAudioError('No valid user or token found.');
+    console.log('useEffect triggered for modules - jwtContext:', jwtContext, 'agentId:', agentId, 'token:', token);
+    if (!token) {
+      console.log('No token found');
+      setAudioError('No valid token found.');
       setIsLoading(false);
+      return;
     }
+    setIsLoading(true);
+    console.log('Fetching all modules...');
+    authApi.getAllTrainingModules(token, agentId) // Pass agentId here
+      .then((data: authApi.TrainingModule[]) => {
+        console.log('Modules data received:', data);
+        const sortedModules = data.sort((a: authApi.TrainingModule, b: authApi.TrainingModule) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId));
+        console.log('Sorted modules:', sortedModules);
+        setModules(sortedModules);
+      })
+      .catch((error: any) => {
+        console.error('Error fetching modules:', error);
+        setAudioError(`Failed to load modules: ${error.message}`);
+      })
+      .finally(() => setIsLoading(false));
   }, [agentId, token]);
 
   // Fetch selected module details when moduleId changes
@@ -101,12 +101,12 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
           setIsLoading(true);
           const updatedModule = await authApi.getTrainingById(token, moduleId);
           setSelectedModule(updatedModule);
-          const updatedModules = await authApi.getAllTrainingModules(token);
+          const updatedModules = await authApi.getAllTrainingModules(token, agentId); // Pass agentId here
           setModules(updatedModules.sort((a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)));
           setIsLoading(false);
         }
       } catch (error: any) {
-        console.error('Progress update failed:', error);
+        console.error('Progress progress failed:', error);
         setAudioError(`Failed to update progress: ${error.message}`);
       }
     }
