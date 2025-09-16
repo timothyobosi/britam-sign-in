@@ -142,6 +142,18 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         updateProgress(selectedModule.moduleId, currentTime);
       }
     }
+    // Clear error and navigate back to the modules list page
+    setAudioError(null);
+    navigate('/training');
+    setSelectedModule(null);
+  };
+
+  const handleTryAgain = () => {
+    // Mimic handleClose behavior: update progress (if possible) and navigate back
+    if (selectedModule) {
+      updateProgress(selectedModule.moduleId, currentTime);
+    }
+    setAudioError(null);
     navigate('/training');
     setSelectedModule(null);
   };
@@ -185,17 +197,22 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       border={false}
       content={false}
       sx={{
-        height: '100%',
-        overflow: 'hidden',
-        position: 'relative'
+        minHeight: '300px', // Minimum height for better visibility
+        height: 'auto', // Allow dynamic height based on content
+        maxWidth: '100%', // Ensure it doesn't exceed parent width
+        overflow: 'visible', // Allow content to expand
+        [theme.breakpoints.down('sm')]: { // Mobile adjustments
+          minHeight: '200px', // Smaller minimum height for mobile
+          padding: 1, // Reduce padding on mobile
+        },
       }}
     >
       <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', backgroundColor: theme.palette.grey[100] }}>
         {audioError ? (
           <Box sx={{ textAlign: 'center' }}>
             <Typography color="error" align="center">{audioError}</Typography>
-            <Button variant="contained" onClick={handleClose} sx={{ mt: 2 }}>
-              Try Again
+            <Button variant="contained" onClick={handleTryAgain} sx={{ mt: 2 }}>
+              Get back to Course Outline
             </Button>
           </Box>
         ) : (
@@ -237,7 +254,17 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
               </Grid>
             ) : (
               selectedModule && (
-                <MainCard title={`Lesson ${selectedModule.moduleId} - ${selectedModule.title}`} sx={{ mb: 2 }}>
+                <MainCard
+                  title={`Lesson ${selectedModule.moduleId} - ${selectedModule.title}`}
+                  sx={{
+                    width: '100%', // Full width for better mobile compatibility
+                    maxWidth: '600px', // Cap width on larger screens
+                    [theme.breakpoints.down('sm')]: {
+                      maxWidth: '100%', // Full width on mobile
+                      padding: 1, // Reduce padding on mobile
+                    },
+                  }}
+                >
                   <ReactH5AudioPlayer
                     ref={audioRef}
                     src={`https://brm-partners.britam.com${selectedModule.filePath}`} // Ensure this URL is correct
@@ -274,9 +301,9 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                     customAdditionalControls={[]}
                     customVolumeControls={[]}
                     customControlsSection={['MAIN_CONTROLS', (
-                      <div style={{ display: 'flex', gap: '10px', padding: '10px' }}>
-                        <IconButton onClick={() => audioRef.current?.audio?.play()} color="primary"><FaPlay /></IconButton>
-                        <IconButton onClick={() => audioRef.current?.audio?.pause()} color="primary"><FaPause /></IconButton>
+                      <div style={{ display: 'flex', gap: '10px', padding: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {/* <IconButton onClick={() => audioRef.current?.audio?.play()} color="primary"><FaPlay /></IconButton>
+                        <IconButton onClick={() => audioRef.current?.audio?.pause()} color="primary"><FaPause /></IconButton> */}
                         <IconButton onClick={handleRewind} color="primary"><FaUndo /></IconButton>
                         <IconButton onClick={handleRestart} color="primary"><FaUndo style={{ transform: 'rotate(180deg)' }} /></IconButton>
                         <Button variant="contained" onClick={handleClose} sx={{ mt: 1 }}>Close</Button>
@@ -284,21 +311,24 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                     )]}
                     showJumpControls={false}
                     showSkipControls={false}
+                    style={{ width: '100%' }} // Ensure player takes full width
                   />
-                  <Typography>Duration: {formatToMinutes(selectedModule.duration * 60)} mins</Typography>
-                  <Typography>Progress: {formatToMinutes(currentTime)} / {formatToMinutes(selectedModule.duration * 60)} mins</Typography>
-                  <Typography>Status: {selectedModule.status}</Typography>
-                  {selectedModule.isComplete && (
-                    <Button
-                      variant="contained"
-                      startIcon={<FaArrowRight />}
-                      onClick={handleNextModule}
-                      disabled={modules.every(m => m.isComplete)}
-                      sx={{ mt: 2 }}
-                    >
-                      Next Module
-                    </Button>
-                  )}
+                  <Box sx={{ p: 2, textAlign: 'center' }}>
+                    <Typography>Duration: {formatToMinutes(selectedModule.duration * 60)} mins</Typography>
+                    <Typography>Progress: {formatToMinutes(currentTime)} / {formatToMinutes(selectedModule.duration * 60)} mins</Typography>
+                    <Typography>Status: {selectedModule.status}</Typography>
+                    {selectedModule.isComplete && (
+                      <Button
+                        variant="contained"
+                        startIcon={<FaArrowRight />}
+                        onClick={handleNextModule}
+                        disabled={modules.every(m => m.isComplete)}
+                        sx={{ mt: 2 }}
+                      >
+                        Next Module
+                      </Button>
+                    )}
+                  </Box>
                 </MainCard>
               )
             )}
