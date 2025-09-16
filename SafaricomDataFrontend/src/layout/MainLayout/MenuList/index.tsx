@@ -1,33 +1,16 @@
 import { memo, useLayoutEffect, useState } from 'react';
-
-interface MenuItem {
-    id: string;
-    title: any;
-    icon?: any;
-    type: string;
-    children?: MenuItem[];
-    url?: string;
-}
-
-// material-ui
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import List from '@mui/material/List';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
-
-// project imports
 import NavItem from './NavItem';
 import NavGroup from './NavGroup';
 import menuItem from 'menu-items';
 import useConfig from 'hooks/useConfig';
-
 import { MenuOrientation } from 'config';
-import { Menu } from 'menu-items/widget';
 import { HORIZONTAL_MAX_ITEM } from 'config';
 import { useGetMenu, useGetMenuMaster } from 'api/menu';
-
-// ==============================|| SIDEBAR MENU LIST ||============================== //
 
 const MenuList = () => {
     const downMD = useMediaQuery((theme) => theme.breakpoints.down('md'));
@@ -38,43 +21,18 @@ const MenuList = () => {
     const drawerOpen = menuMaster.isDashboardDrawerOpened;
     const isHorizontal = menuOrientation === MenuOrientation.HORIZONTAL && !downMD;
 
-    const [selectedID, setSelectedID] = useState(() => {
-        return localStorage.getItem('sidebarSelectedID') || '';
-    });
-    const [menuItems, setMenuItems] = useState<{ items: MenuItem[] }>({ items: [] });
-
-    let widgetMenu = Menu();
+    const [selectedID, setSelectedID] = useState('');
+    const [menuItems, setMenuItems] = useState({ items: [] });
 
     useLayoutEffect(() => {
-        const isFound = menuItem.items.some((element) => {
-            if (element.id === 'group-widget') {
-                return true;
-            }
-            return false;
-        });
-        if (menuLoading) {
-            menuItem.items.splice(1, 0, widgetMenu);
-            setMenuItems({ items: [...menuItem.items] });
-        } else if (!menuLoading && widgetMenu?.id !== undefined && !isFound) {
-            menuItem.items.splice(1, 1, widgetMenu);
-            setMenuItems({ items: [...menuItem.items] });
-        } else {
-            setMenuItems({ items: [...menuItem.items] });
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        setMenuItems({ items: [...menuItem.items] });
     }, [menuLoading]);
 
-    // Persist selectedID to localStorage whenever it changes
-    useLayoutEffect(() => {
-        localStorage.setItem('sidebarSelectedID', selectedID);
-    }, [selectedID]);
-
-    // last menu-item to show in horizontal menu bar
     const lastItem = isHorizontal ? HORIZONTAL_MAX_ITEM : null;
 
-    let lastItemIndex: number = menuItems.items.length - 1;
-    let remItems: any[] = [];
-    let lastItemId: string | undefined;
+    let lastItemIndex = menuItems.items.length - 1;
+    let remItems;
+    let lastItemId;
 
     if (lastItem && lastItem < menuItems.items.length) {
         lastItemId = menuItems.items[lastItem - 1].id;
@@ -124,4 +82,4 @@ const MenuList = () => {
     return !isHorizontal ? <Box {...(drawerOpen && { sx: { mt: 1.5 } })}>{navItems}</Box> : <>{navItems}</>;
 };
 
-export default memo(MenuList);
+export default memo(MenuList);

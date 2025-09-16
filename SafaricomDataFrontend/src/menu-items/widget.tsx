@@ -64,19 +64,19 @@ export const Menu = () => {
         });
     };
 
-//     const menuItem = (subList) => {
-//         let list = {
-//             ...subList,
-//             title: <FormattedMessage id={`${subList.title}`} />,
-//             // @ts-ignore
-//             icon: icons[subList.icon]
-//         };
-//
-//         if (subList.type === 'collapse') {
-//             list.children = SubChildrenLis(subList.children);
-//         }
-//         return list;
-//     };
+    // const menuItem = (subList) => {
+    //     let list = {
+    //         ...subList,
+    //         title: <FormattedMessage id={`${subList.title}`} />,
+    //         // @ts-ignore
+    //         icon: icons[subList.icon]
+    //     };
+
+    //     if (subList.type === 'collapse') {
+    //         list.children = SubChildrenLis(subList.children);
+    //     }
+    //     return list;
+    // };
 
     const withoutMenu = menu?.children?.filter((item) => item.id !== 'no-menu');
 

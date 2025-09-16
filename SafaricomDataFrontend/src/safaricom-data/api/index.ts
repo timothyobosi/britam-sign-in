@@ -88,18 +88,24 @@ export async function getAllTrainingModules(token: string): Promise<TrainingModu
   });
   if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
   const data = await res.json();
-  return data.map((module: any) => ({
-    moduleId: module.moduleId,
-    title: module.title,
-    duration: module.duration,
-    filePath: module.filePath,
-    watchTime: module.watchTime || 0,
-    isComplete: module.isComplete || false,
-    status: module.status || 'Not Started',
-    sequence: module.sequence,
-    dateCreated: module.dateCreated,
-    updateDate: module.updateDate
-  }));
+  console.log('Raw API data:', data); // Debug raw response
+  return data.map((module: any) => {
+    // Find the latest progress for the current agent (agentId)
+    const agentProgress = module.trainingProgresses.find((progress: any) => progress.agentid === agentId);
+    const progress = agentProgress || module.trainingProgresses[0] || {}; // Fallback to first progress or empty object
+    return {
+      moduleId: module.moduleid, // Match the lowercase 'moduleid' from API
+      title: module.title,
+      duration: module.duration,
+      filePath: module.filepath, // Match the lowercase 'filepath' from API
+      watchTime: progress.watchtime || 0,
+      isComplete: !!progress.iscomplete, // Convert 1/0 to boolean
+      status: progress.status || 'Not Started',
+      sequence: module.sequence,
+      dateCreated: module.datecreated,
+      updateDate: module.updatedate
+    };
+  });
 }
 
 export async function getTrainingById(token: string, id: number): Promise<TrainingModule> {
@@ -249,5 +255,3 @@ export async function completeResetPassword(token: string, password: string, ema
   });
   return res.json();
 }
-
-// (rest of your training + quiz APIs remain unchanged)

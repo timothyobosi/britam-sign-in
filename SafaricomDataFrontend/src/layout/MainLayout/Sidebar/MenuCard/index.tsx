@@ -90,11 +90,11 @@ const MenuCard = () => {
                 }
             }}
         >
-            <Box sx={{ p: 2 }}>
+            {/* <Box sx={{ p: 2 }}>
                 <List disablePadding sx={{ m: 0 }}>
-                    <ListItem alignItems="flex-start" disableGutters disablePadding>
-                        <ListItemAvatar sx={{ mt: 0 }}>
-                            <Avatar
+                    <ListItem alignItems="flex-start" disableGutters disablePadding> */}
+                        {/* <ListItemAvatar sx={{ mt: 0 }}> */}
+                            {/* <Avatar
                                 variant="rounded"
                                 sx={{
                                     ...theme.typography.commonAvatar,
@@ -106,9 +106,9 @@ const MenuCard = () => {
                                 }}
                             >
                                 <TableChartOutlinedIcon fontSize="inherit" />
-                            </Avatar>
-                        </ListItemAvatar>
-                        <ListItemText
+                            </Avatar> */}
+                        {/* </ListItemAvatar> */}
+                        {/* <ListItemText
                             sx={{ mt: 0 }}
                             primary={
                                 <Typography
@@ -119,11 +119,11 @@ const MenuCard = () => {
                                 </Typography>
                             }
                             secondary={<Typography variant="caption"> 28/23 GB</Typography>}
-                        />
-                    </ListItem>
+                        /> */}
+                    {/* </ListItem>
                 </List>
                 <LinearProgressWithLabel value={80} />
-            </Box>
+            </Box> */}
         </Card>
     );
 };

@@ -2,17 +2,14 @@ import PropTypes from 'prop-types';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '@mui/material/styles';
 import { Box, Button, Grid, Typography, CircularProgress, IconButton } from '@mui/material';
-import Collapse from '@mui/material/Collapse';
-import { FaPause, FaPlay, FaUndo } from 'react-icons/fa';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { FaPause, FaPlay, FaUndo, FaArrowRight } from 'react-icons/fa';
+import { useNavigate, useLocation, useParams, useMatch } from 'react-router-dom';
 import MainCard from 'ui-component/cards/MainCard';
 import SkeletonTotalOrderCard from 'ui-component/cards/Skeleton/EarningCard';
 import ReactH5AudioPlayer from 'react-h5-audio-player';
-import type { H5AudioPlayer } from 'react-h5-audio-player';
 import 'react-h5-audio-player/lib/styles.css';
 import * as authApi from 'safaricom-data/api/index';
 import JWTContext from 'contexts/JWTContext';
-
 
 interface TrainingAudioCardProps {
   isLoading?: boolean;
@@ -25,13 +22,16 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   const token = localStorage.getItem('serviceToken');
   const navigate = useNavigate();
   const location = useLocation();
+  const { moduleId } = useParams<{ moduleId?: string }>();
+  const match = useMatch('/training/:moduleId');
   const [isLoading, setIsLoading] = useState(propLoading);
   const [modules, setModules] = useState<authApi.TrainingModule[]>([]);
-  const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
   const [selectedModule, setSelectedModule] = useState<authApi.TrainingModule | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
-  const audioRef = useRef<H5AudioPlayer | null>(null);
+  const audioRef = useRef<ReactH5AudioPlayer | null>(null);
   const [currentTime, setCurrentTime] = useState<number>(0);
+  const [initialPlaybackTime, setInitialPlaybackTime] = useState<number>(0);
+  const [audioDuration, setAudioDuration] = useState<number>(0);
 
   // Fetch all modules
   useEffect(() => {
@@ -42,7 +42,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       authApi.getAllTrainingModules(token)
         .then((data: authApi.TrainingModule[]) => {
           console.log('Modules data received:', data);
-          const sortedModules = data.sort((a: authApi.TrainingModule, b: authApi.TrainingModule) => (a.sequence || 0) - (b.sequence || 0));
+          const sortedModules = data.sort((a: authApi.TrainingModule, b: authApi.TrainingModule) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId));
           console.log('Sorted modules:', sortedModules);
           setModules(sortedModules);
         })
@@ -58,40 +58,51 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     }
   }, [agentId, token]);
 
-  // Fetch selected module details when selectedModuleId changes
+  // Fetch selected module details when moduleId changes
   useEffect(() => {
-    console.log('useEffect triggered for selectedModuleId:', selectedModuleId, 'token:', token);
-    if (selectedModuleId && token) {
+    console.log('useEffect triggered for moduleId:', moduleId, 'token:', token);
+    const id = moduleId ? parseInt(moduleId, 10) : null;
+    if (id && !isNaN(id) && token && match) {
       setIsLoading(true);
-      console.log('Fetching module details for moduleId:', selectedModuleId);
-      authApi.getTrainingById(token, selectedModuleId)
+      console.log('Fetching module details for moduleId:', id);
+      authApi.getTrainingById(token, id)
         .then((module: authApi.TrainingModule) => {
           console.log('Module details fetched:', module);
           setSelectedModule(module);
-          setCurrentTime(module.watchTime || 0); // Sync currentTime with fetched watchTime
+          setCurrentTime(module.watchTime || 0);
+          setInitialPlaybackTime(0);
+          setAudioDuration(0);
+          setAudioError(null);
         })
         .catch((error: any) => {
           console.error('Error fetching module details:', error);
-          setAudioError(`Failed to load module ${selectedModuleId}: ${error.message}`);
+          setAudioError(`Failed to load module ${id}: ${error.message}`);
         })
         .finally(() => setIsLoading(false));
     } else {
       setSelectedModule(null);
       setCurrentTime(0);
+      setInitialPlaybackTime(0);
+      setAudioDuration(0);
+      setAudioError(null);
     }
-  }, [selectedModuleId, token]);
+  }, [moduleId, token, match]);
 
   const updateProgress = async (moduleId: number, watchedSeconds: number) => {
-    if (token) {
+    if (token && selectedModule) {
       try {
-        console.log('Updating progress - moduleId:', moduleId, 'watchedSeconds:', watchedSeconds);
-        const response = await authApi.updateTrainingProgress(token, moduleId, watchedSeconds);
+        const sessionTime = Math.max(0, watchedSeconds - initialPlaybackTime);
+        let newWatchTime = (selectedModule.watchTime || 0) + sessionTime;
+        newWatchTime = Math.min(newWatchTime, selectedModule.duration * 60);
+        console.log('Updating progress - moduleId:', moduleId, 'sessionTime:', sessionTime, 'newWatchTime:', newWatchTime);
+        const response = await authApi.updateTrainingProgress(token, moduleId, newWatchTime);
         console.log('Progress update response:', response);
-        // Refetch module details to update UI
-        if (selectedModuleId) {
+        if (moduleId) {
           setIsLoading(true);
-          const updatedModule = await authApi.getTrainingById(token, selectedModuleId);
+          const updatedModule = await authApi.getTrainingById(token, moduleId);
           setSelectedModule(updatedModule);
+          const updatedModules = await authApi.getAllTrainingModules(token);
+          setModules(updatedModules.sort((a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)));
           setIsLoading(false);
         }
       } catch (error: any) {
@@ -108,44 +119,54 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       const currentIndex = modules.findIndex((m: authApi.TrainingModule) => m.moduleId === moduleId);
       const nextIncompleteIndex = modules.findIndex((m: authApi.TrainingModule) => !m.isComplete);
       console.log('Current index:', currentIndex, 'Next incomplete index:', nextIncompleteIndex);
-      if (currentIndex <= nextIncompleteIndex || nextIncompleteIndex === -1) {
-        setSelectedModuleId(moduleId);
+      if (currentIndex <= nextIncompleteIndex || nextIncompleteIndex === -1 || module.isComplete) {
+        navigate(`/training/${moduleId}`);
       } else {
-        setAudioError('Please complete modules in sequence.');
+        setAudioError('Please complete the previous module before proceeding.');
       }
     } else {
       console.log('Module not found in modules list:', moduleId);
+      setAudioError('Selected module not found.');
     }
   };
 
   const handleClose = () => {
-    if (audioRef.current) {
-      const watchedSeconds = Math.floor(audioRef.current?.audio.currentTime || 0);
-      if (token && selectedModule) {
-        updateProgress(selectedModule.moduleId, watchedSeconds);
-      }
+    if (audioRef.current?.audio && selectedModule) {
+      const watchedSeconds = Math.floor(audioRef.current.audio.currentTime || currentTime);
+      updateProgress(selectedModule.moduleId, watchedSeconds);
     }
-    setSelectedModuleId(null);
-    setSelectedModule(null);
     navigate('/training');
+    setSelectedModule(null);
   };
 
   const handleRewind = () => {
-    if (audioRef.current && audioRef.current.audio) {
-      audioRef.current.audio.currentTime = Math.max(0, audioRef.current?.audio.currentTime - 10 || 0);
+    if (audioRef.current?.audio) {
+      audioRef.current.audio.currentTime = Math.max(0, audioRef.current.audio.currentTime - 10);
     }
   };
 
   const handleRestart = () => {
-    if (audioRef.current && audioRef.current.audio) {
+    if (audioRef.current?.audio) {
       audioRef.current.audio.currentTime = 0;
       audioRef.current.audio.play();
     }
   };
 
+  const handleNextModule = () => {
+    if (selectedModule && modules.length > 0) {
+      const currentIndex = modules.findIndex(m => m.moduleId === selectedModule.moduleId);
+      const nextIndex = modules.findIndex(m => m.moduleId > selectedModule.moduleId && !m.isComplete);
+      if (nextIndex !== -1) {
+        navigate(`/training/${modules[nextIndex].moduleId}`);
+      } else {
+        console.log('No next incomplete module available');
+      }
+    }
+  };
+
   if (isLoading) return <SkeletonTotalOrderCard />;
 
-  console.log('Rendering - location:', location.pathname, 'modules:', modules, 'selectedModuleId:', selectedModuleId, 'selectedModule:', selectedModule, 'audioError:', audioError);
+  console.log('Rendering - location:', location.pathname, 'modules:', modules, 'moduleId:', moduleId, 'selectedModule:', selectedModule, 'audioError:', audioError);
 
   return (
     <MainCard
@@ -157,35 +178,40 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         position: 'relative'
       }}
     >
-  <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', backgroundColor: theme.palette.grey[100] }}>
+      <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', backgroundColor: theme.palette.grey[100] }}>
         {audioError ? (
           <Typography color="error" align="center">{audioError}</Typography>
         ) : (
           <>
-            {selectedModuleId === null ? (
+            {!match ? (
               <Grid container spacing={2}>
                 {modules.length > 0 ? (
                   modules.map((module) => (
-                    <Grid item xs={12} sm={6} md={3} key={`module-${module.moduleId}`}>
-                      <MainCard title={`Module ${module.moduleId}`}
-                        sx={{
-                          cursor: 'pointer',
-                          border: '1px solid',
-                          borderColor: theme.palette.divider,
-                          backgroundColor: '#fff',
-                          transition: 'background 0.2s',
-                          '&:hover': { backgroundColor: theme.palette.action.hover }
-                        }}
-                        onClick={() => handleModuleSelect(module.moduleId)}
-                      >
-                        <Typography variant="h6">{module.title}</Typography>
-                        <Typography>Duration: {module.duration} min</Typography>
-                        <Typography>Watch Time: {module.watchTime} sec</Typography>
-                        <Typography>Status: {module.status}</Typography>
-                        {module.isComplete && (
-                          <Typography color="success.main">Completed!</Typography>
-                        )}
-                      </MainCard>
+                    <Grid item xs={12} sm={6} md={3} key={`module-${module.moduleId || module.title}`}>
+                      {module.moduleId ? (
+                        <MainCard
+                          title={`Lesson ${module.moduleId} - ${module.title || 'Untitled'}`} // Guard against undefined moduleId
+                          sx={{
+                            cursor: 'pointer',
+                            border: '1px solid',
+                            borderColor: theme.palette.divider,
+                            backgroundColor: '#fff',
+                            transition: 'background 0.2s',
+                            '&:hover': { backgroundColor: theme.palette.action.hover }
+                          }}
+                          onClick={() => handleModuleSelect(module.moduleId)}
+                        >
+                          <Typography variant="h6">{module.title || 'Untitled'}</Typography>
+                          <Typography>Duration: {module.duration || 0} min</Typography>
+                          <Typography>Watch Time: {module.watchTime || 0} sec</Typography>
+                          <Typography>Status: {module.status || 'Not Started'}</Typography>
+                          {module.isComplete && (
+                            <Typography color="success.main">Completed!</Typography>
+                          )}
+                        </MainCard>
+                      ) : (
+                        <Typography color="error">Invalid module data</Typography>
+                      )}
                     </Grid>
                   ))
                 ) : (
@@ -194,57 +220,65 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
               </Grid>
             ) : (
               selectedModule && (
-                <Collapse in={true} timeout={500}>
-                  <MainCard title={`Module ${selectedModule.moduleId} - ${selectedModule.title}`}
-                    sx={{ mb: 2 }}
-                  >
-                    <ReactH5AudioPlayer
-                      ref={audioRef}
-                      src={`https://brm-partners.britam.com${selectedModule.filePath}`}
-                      onPlay={() => console.log('Playing')}
-                      onPause={() => {
-                        if (audioRef.current && audioRef.current.audio) {
-                          const watchedSeconds = Math.floor(audioRef.current.audio.currentTime);
-                          if (token && selectedModule) {
-                            updateProgress(selectedModule.moduleId, watchedSeconds);
-                          }
-                        }
-                      }}
-                      onEnded={() => {
-                        if (token && selectedModule) {
-                          const watchedSeconds = Math.floor(selectedModule.duration * 60);
-                          updateProgress(selectedModule.moduleId, watchedSeconds);
-                        }
-                      }}
-                      listenInterval={1000}
-                      onListen={() => {
-                        if (audioRef.current && audioRef.current.audio) {
-                          setCurrentTime(audioRef.current.audio.currentTime);
-                        }
-                      }}
-                      customAdditionalControls={[]}
-                      customVolumeControls={[]}
-                      showJumpControls={false}
-                      showSkipControls={false}
-                    />
-                    <Typography>Duration: {selectedModule.duration} min</Typography>
-                    <Typography>Progress: {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60)} / {selectedModule.duration}:00</Typography>
-                    <Typography>Status: {selectedModule.status}</Typography>
-                    {selectedModule.isComplete ? (
-                      <Typography sx={{ mt: 2 }} color="success.main">Completed!</Typography>
-                    ) : null}
+                <MainCard title={`Lesson ${selectedModule.moduleId} - ${selectedModule.title}`} sx={{ mb: 2 }}>
+                  <ReactH5AudioPlayer
+                    ref={audioRef}
+                    src={`https://brm-partners.britam.com${selectedModule.filePath}`}
+                    listenInterval={1000}
+                    onPlay={() => {
+                      console.log('Playing', audioRef.current?.audio);
+                      setInitialPlaybackTime(currentTime);
+                    }}
+                    onPause={() => {
+                      console.log('Pausing - using currentTime:', currentTime);
+                      if (audioRef.current?.audio && selectedModule) {
+                        updateProgress(selectedModule.moduleId, Math.floor(audioRef.current.audio.currentTime));
+                      }
+                    }}
+                    onEnded={() => {
+                      if (selectedModule) {
+                        const fullDuration = selectedModule.duration * 60;
+                        updateProgress(selectedModule.moduleId, fullDuration);
+                      }
+                    }}
+                    onLoadedMetadata={(e) => setAudioDuration(e.target.duration)}
+                    onListen={(e) => {
+                      console.log('onListen event:', e);
+                      if (e.target) {
+                        let time = e.target.currentTime || 0;
+                        time = Math.min(time, audioDuration || selectedModule.duration * 60);
+                        setCurrentTime(Math.floor(isNaN(time) ? 0 : time));
+                      }
+                    }}
+                    customAdditionalControls={[]}
+                    customVolumeControls={[]}
+                    customControlsSection={['MAIN_CONTROLS', (
+                      <div style={{ display: 'flex', gap: '10px', padding: '10px' }}>
+                        <IconButton onClick={() => audioRef.current?.audio?.play()} color="primary"><FaPlay /></IconButton>
+                        <IconButton onClick={() => audioRef.current?.audio?.pause()} color="primary"><FaPause /></IconButton>
+                        <IconButton onClick={handleRewind} color="primary"><FaUndo /></IconButton>
+                        <IconButton onClick={handleRestart} color="primary"><FaUndo style={{ transform: 'rotate(180deg)' }} /></IconButton>
+                        <Button variant="contained" onClick={handleClose} sx={{ mt: 1 }}>Close</Button>
+                      </div>
+                    )]}
+                    showJumpControls={false}
+                    showSkipControls={false}
+                  />
+                  <Typography>Duration: {selectedModule.duration} min</Typography>
+                  <Typography>Progress: {Math.floor(currentTime / 60)}:{(currentTime % 60).toString().padStart(2, '0')} / {selectedModule.duration}:00</Typography>
+                  <Typography>Status: {selectedModule.status}</Typography>
+                  {selectedModule.isComplete && (
                     <Button
-                      onClick={() => {
-                        setSelectedModuleId(null);
-                        setSelectedModule(null);
-                      }}
                       variant="contained"
+                      startIcon={<FaArrowRight />}
+                      onClick={handleNextModule}
+                      disabled={modules.every(m => m.isComplete)}
                       sx={{ mt: 2 }}
                     >
-                      Close
+                      Next Module
                     </Button>
-                  </MainCard>
-                </Collapse>
+                  )}
+                </MainCard>
               )
             )}
           </>
