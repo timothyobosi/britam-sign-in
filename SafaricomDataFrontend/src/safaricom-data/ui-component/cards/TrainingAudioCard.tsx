@@ -168,9 +168,9 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   console.log('Rendering - location:', location.pathname, 'modules:', modules, 'moduleId:', moduleId, 'selectedModule:', selectedModule, 'audioError:', audioError);
 
-  // Convert seconds to decimal hours (rounded to 2 decimal places)
-  const formatToHours = (seconds: number) => {
-    return (seconds / 3600).toFixed(2);
+  // Convert seconds to decimal minutes (rounded to 2 decimal places)
+  const formatToMinutes = (seconds: number) => {
+    return (seconds / 60).toFixed(2);
   };
 
   return (
@@ -207,8 +207,8 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                           onClick={() => handleModuleSelect(module.moduleId)}
                         >
                           <Typography variant="h6">{module.title || 'Untitled'}</Typography>
-                          <Typography>Duration: {formatToHours(module.duration * 60)} hours</Typography>
-                          <Typography>Watch Time: {formatToHours(module.watchTime)} hours</Typography>
+                          <Typography>Duration: {formatToMinutes(module.duration * 60)} mins</Typography>
+                          <Typography>Watch Time: {formatToMinutes(module.watchTime)} mins</Typography>
                           <Typography>Status: {module.status || 'Not Started'}</Typography>
                           {module.isComplete && (
                             <Typography color="success.main">Completed!</Typography>
@@ -273,8 +273,8 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                     showJumpControls={false}
                     showSkipControls={false}
                   />
-                  <Typography>Duration: {formatToHours(selectedModule.duration * 60)} hours</Typography>
-                  <Typography>Progress: {formatToHours(currentTime)} / {formatToHours(selectedModule.duration * 60)} hours</Typography>
+                  <Typography>Duration: {formatToMinutes(selectedModule.duration * 60)} mins</Typography>
+                  <Typography>Progress: {formatToMinutes(currentTime)} / {formatToMinutes(selectedModule.duration * 60)} mins</Typography>
                   <Typography>Status: {selectedModule.status}</Typography>
                   {selectedModule.isComplete && (
                     <Button
