@@ -53,7 +53,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       })
       .catch((error: any) => {
         console.error('Error fetching modules:', error);
-        setAudioError(`Failed to load modules: ${error.message}`);
+        setAudioError(`Failed to load modules. Please try again later.`);
       })
       .finally(() => setIsLoading(false));
   }, [agentId, token]);
@@ -76,7 +76,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         })
         .catch((error: any) => {
           console.error('Error fetching module details:', error);
-          setAudioError(`Failed to load module ${id}: ${error.message || '404 Not Found'}`);
+          setAudioError(`Failed to load module ${id}. Please try again later.`);
         })
         .finally(() => setIsLoading(false));
     } else {
@@ -91,7 +91,9 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   const updateProgress = async (moduleId: number, watchedSeconds: number) => {
     if (token && selectedModule) {
       try {
-        const sessionTime = Math.max(0, watchedSeconds - initialPlaybackTime);
+        // Ensure watchedSeconds is a valid number
+        const validWatchedSeconds = Math.max(0, Number.isFinite(watchedSeconds) ? watchedSeconds : 0);
+        const sessionTime = Math.max(0, validWatchedSeconds - initialPlaybackTime);
         let newWatchTime = (selectedModule.watchTime || 0) + sessionTime;
         newWatchTime = Math.min(newWatchTime, selectedModule.duration * 60); // Cap at duration in seconds
         console.log('Updating progress - moduleId:', moduleId, 'sessionTime:', sessionTime, 'newWatchTime:', newWatchTime);
@@ -106,8 +108,8 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
           setIsLoading(false);
         }
       } catch (error: any) {
-        console.error('Progress progress failed:', error);
-        setAudioError(`Failed to update progress: ${error.message}`);
+        console.error('Progress update failed:', error);
+        setAudioError('Failed to save your progress. Please try closing the module again or contact support if the issue persists.');
       }
     }
   };
@@ -134,6 +136,11 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     if (audioRef.current?.audio && selectedModule) {
       const watchedSeconds = Math.floor(audioRef.current.audio.currentTime || currentTime);
       updateProgress(selectedModule.moduleId, watchedSeconds);
+    } else {
+      // Fallback to currentTime if audioRef is not ready
+      if (selectedModule) {
+        updateProgress(selectedModule.moduleId, currentTime);
+      }
     }
     navigate('/training');
     setSelectedModule(null);
@@ -185,7 +192,12 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     >
       <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', backgroundColor: theme.palette.grey[100] }}>
         {audioError ? (
-          <Typography color="error" align="center">{audioError}</Typography>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography color="error" align="center">{audioError}</Typography>
+            <Button variant="contained" onClick={handleClose} sx={{ mt: 2 }}>
+              Try Again
+            </Button>
+          </Box>
         ) : (
           <>
             {!match ? (
@@ -257,7 +269,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                     }}
                     onError={(e) => {
                       console.error('Audio error:', e);
-                      setAudioError('Failed to load audio file.');
+                      setAudioError('Failed to load audio file. Please try again later.');
                     }}
                     customAdditionalControls={[]}
                     customVolumeControls={[]}
