@@ -248,10 +248,15 @@ export async function resetPassword(email: string) {
 }
 
 export async function completeResetPassword(token: string, password: string, email: string) {
-  const res = await fetch(`${BASE_URL}/complete-reset-password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token, newPassword: password, email }),
-  });
-  return res.json();
+    const res = await fetch(`${import.meta.env.VITE_API_TARGET}/api/Agents/complete-reset-password`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword: password, email }),
+    });
+    if (!res.ok) {
+        const text = await res.text(); // Log raw response for debugging
+        console.error('API Error:', res.status, text);
+        return { success: false, message: `HTTP error! status: ${res.status}`, agentId: null };
+    }
+    return res.json();
 }

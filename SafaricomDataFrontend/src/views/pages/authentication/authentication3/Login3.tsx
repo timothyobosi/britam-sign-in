@@ -46,7 +46,7 @@ const Login = () => {
                                             <Grid item>
                                                 <Stack alignItems="center" justifyContent="center" spacing={1}>
                                                     <Typography color="secondary.main" gutterBottom variant={downMD ? 'h3' : 'h2'}>
-                                                        Hi, Welcome Back
+                                                        Hi, Welcome BackW
                                                     </Typography>
                                                     <Typography
                                                         variant="caption"
@@ -73,7 +73,7 @@ const Login = () => {
                                                 variant="subtitle1"
                                                 sx={{ textDecoration: 'none' }}
                                             >
-                                                Don&apos;t have an account?
+                                                Don&apos;t have an account?W
                                             </Typography>
                                         </Grid>
                                     </Grid>

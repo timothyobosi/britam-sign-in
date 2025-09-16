@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 // material-ui
 import Button from '@mui/material/Button';
@@ -17,6 +17,18 @@ import AuthFooter from 'ui-component/cards/AuthFooter';
 
 const CheckMail = () => {
     const downMD = useMediaQuery((theme) => theme.breakpoints.down('md'));
+    const navigate = useNavigate();
+    const location = useLocation();
+    const { state } = location;
+    const { email } = state || {};
+
+    const handleSetNewPassword = () => {
+        if (!email) {
+            navigate('/forgot'); // Redirect if email is missing
+            return;
+        }
+        navigate('/set-new-password', { state: { email } }); // Pass only email
+    };
 
     return (
         <AuthWrapper1>
@@ -27,20 +39,22 @@ const CheckMail = () => {
                             <AuthCardWrapper>
                                 <Grid container spacing={2} alignItems="center" justifyContent="center">
                                     <Grid item sx={{ mb: 3 }}>
-                                        <Link to="#" aria-label="theme logo">
-                                            <Logo />
-                                        </Link>
+                                        <Logo />
                                     </Grid>
                                     <Grid item xs={12}>
-                                        <Grid container alignItems="center" justifyContent="center" textAlign="center" spacing={2}>
-                                            <Grid item xs={12}>
+                                        <Grid container direction="column" alignItems="center" justifyContent="center" textAlign="center">
+                                            <Grid item>
                                                 <Typography color="secondary.main" gutterBottom variant={downMD ? 'h3' : 'h2'}>
-                                                    Hi, Check Your Mail
+                                                    Check Your Email
                                                 </Typography>
                                             </Grid>
-                                            <Grid item xs={12}>
-                                                <Typography variant="caption" fontSize="16px" textAlign={{ xs: 'center', md: 'inherit' }}>
-                                                    We have sent a password recover instructions to your email.
+                                            <Grid item>
+                                                <Typography variant="caption" fontSize="16px" textAlign="center">
+                                                    We have sent a password reset OTP to
+                                                    <br />
+                                                    <Typography variant="caption" component="span">
+                                                        {email || 'your email'}
+                                                    </Typography>
                                                 </Typography>
                                             </Grid>
                                         </Grid>
@@ -51,11 +65,11 @@ const CheckMail = () => {
                                                 disableElevation
                                                 fullWidth
                                                 size="large"
-                                                type="submit"
                                                 variant="contained"
                                                 color="secondary"
+                                                onClick={handleSetNewPassword}
                                             >
-                                                Open Mail
+                                                Set New Password
                                             </Button>
                                         </AnimateButton>
                                     </Grid>
