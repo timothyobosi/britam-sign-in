@@ -69,7 +69,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         .then((module: authApi.TrainingModule) => {
           console.log('Module details fetched:', module);
           setSelectedModule(module);
-          setCurrentTime(module.watchTime || 0);
+          setCurrentTime(module.watchTime || 0); // Initialize with watchTime in seconds
           setInitialPlaybackTime(0);
           setAudioDuration(0);
           setAudioError(null);
@@ -93,7 +93,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       try {
         const sessionTime = Math.max(0, watchedSeconds - initialPlaybackTime);
         let newWatchTime = (selectedModule.watchTime || 0) + sessionTime;
-        newWatchTime = Math.min(newWatchTime, selectedModule.duration * 60);
+        newWatchTime = Math.min(newWatchTime, selectedModule.duration * 60); // Cap at duration in seconds
         console.log('Updating progress - moduleId:', moduleId, 'sessionTime:', sessionTime, 'newWatchTime:', newWatchTime);
         const response = await authApi.updateTrainingProgress(token, moduleId, newWatchTime);
         console.log('Progress update response:', response);
@@ -168,6 +168,11 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   console.log('Rendering - location:', location.pathname, 'modules:', modules, 'moduleId:', moduleId, 'selectedModule:', selectedModule, 'audioError:', audioError);
 
+  // Convert seconds to decimal hours (rounded to 2 decimal places)
+  const formatToHours = (seconds: number) => {
+    return (seconds / 3600).toFixed(2);
+  };
+
   return (
     <MainCard
       border={false}
@@ -202,8 +207,8 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                           onClick={() => handleModuleSelect(module.moduleId)}
                         >
                           <Typography variant="h6">{module.title || 'Untitled'}</Typography>
-                          <Typography>Duration: {module.duration || 0} min</Typography>
-                          <Typography>Watch Time: {module.watchTime || 0} sec</Typography>
+                          <Typography>Duration: {formatToHours(module.duration * 60)} hours</Typography>
+                          <Typography>Watch Time: {formatToHours(module.watchTime)} hours</Typography>
                           <Typography>Status: {module.status || 'Not Started'}</Typography>
                           {module.isComplete && (
                             <Typography color="success.main">Completed!</Typography>
@@ -268,8 +273,8 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                     showJumpControls={false}
                     showSkipControls={false}
                   />
-                  <Typography>Duration: {selectedModule.duration} min</Typography>
-                  <Typography>Progress: {Math.floor(currentTime / 60)}:{(currentTime % 60).toString().padStart(2, '0')} / {selectedModule.duration}:00</Typography>
+                  <Typography>Duration: {formatToHours(selectedModule.duration * 60)} hours</Typography>
+                  <Typography>Progress: {formatToHours(currentTime)} / {formatToHours(selectedModule.duration * 60)} hours</Typography>
                   <Typography>Status: {selectedModule.status}</Typography>
                   {selectedModule.isComplete && (
                     <Button
