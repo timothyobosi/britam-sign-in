@@ -44,7 +44,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     }
     setIsLoading(true);
     console.log('Fetching all modules...');
-    authApi.getAllTrainingModules(token, agentId) // Pass agentId here
+    authApi.getAllTrainingModules(token, agentId)
       .then((data: authApi.TrainingModule[]) => {
         console.log('Modules data received:', data);
         const sortedModules = data.sort((a: authApi.TrainingModule, b: authApi.TrainingModule) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId));
@@ -76,7 +76,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         })
         .catch((error: any) => {
           console.error('Error fetching module details:', error);
-          setAudioError(`Failed to load module ${id}: ${error.message}`);
+          setAudioError(`Failed to load module ${id}: ${error.message || '404 Not Found'}`);
         })
         .finally(() => setIsLoading(false));
     } else {
@@ -101,7 +101,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
           setIsLoading(true);
           const updatedModule = await authApi.getTrainingById(token, moduleId);
           setSelectedModule(updatedModule);
-          const updatedModules = await authApi.getAllTrainingModules(token, agentId); // Pass agentId here
+          const updatedModules = await authApi.getAllTrainingModules(token, agentId);
           setModules(updatedModules.sort((a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)));
           setIsLoading(false);
         }
@@ -223,7 +223,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                 <MainCard title={`Lesson ${selectedModule.moduleId} - ${selectedModule.title}`} sx={{ mb: 2 }}>
                   <ReactH5AudioPlayer
                     ref={audioRef}
-                    src={`https://brm-partners.britam.com${selectedModule.filePath}`}
+                    src={`https://brm-partners.britam.com${selectedModule.filePath}`} // Ensure this URL is correct
                     listenInterval={1000}
                     onPlay={() => {
                       console.log('Playing', audioRef.current?.audio);
@@ -249,6 +249,10 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                         time = Math.min(time, audioDuration || selectedModule.duration * 60);
                         setCurrentTime(Math.floor(isNaN(time) ? 0 : time));
                       }
+                    }}
+                    onError={(e) => {
+                      console.error('Audio error:', e);
+                      setAudioError('Failed to load audio file.');
                     }}
                     customAdditionalControls={[]}
                     customVolumeControls={[]}
