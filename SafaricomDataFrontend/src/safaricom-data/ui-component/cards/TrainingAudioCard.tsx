@@ -88,31 +88,59 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     }
   }, [moduleId, token, match]);
 
+
+
+  // Save module progress
   const updateProgress = async (moduleId: number, watchedSeconds: number) => {
     if (token && selectedModule) {
       try {
-        // Ensure watchedSeconds is a valid number
-        const validWatchedSeconds = Math.max(0, Number.isFinite(watchedSeconds) ? watchedSeconds : 0);
+        const validWatchedSeconds = Math.max(
+          0,
+          Number.isFinite(watchedSeconds) ? watchedSeconds : 0
+        );
         const sessionTime = Math.max(0, validWatchedSeconds - initialPlaybackTime);
-        let newWatchTime = (selectedModule.watchTime || 0) + sessionTime;
-        newWatchTime = Math.min(newWatchTime, selectedModule.duration * 60); // Cap at duration in seconds
-        console.log('Updating progress - moduleId:', moduleId, 'sessionTime:', sessionTime, 'newWatchTime:', newWatchTime);
-        const response = await authApi.updateTrainingProgress(token, moduleId, newWatchTime);
-        console.log('Progress update response:', response);
+
+        //  Cap watch time at duration (already in seconds)
+        let newWatchTime = (selectedModule.watchTime) + sessionTime;
+        newWatchTime = Math.min(newWatchTime, selectedModule.duration);
+
+        console.log(
+          "Updating progress - moduleId:",
+          moduleId,
+          "sessionTime:",
+          sessionTime,
+          "newWatchTime:",
+          newWatchTime
+        );
+
+        const response = await authApi.updateTrainingProgress(
+          token,
+          moduleId,
+          newWatchTime
+        );
+        console.log("Progress update response:", response);
+
         if (moduleId) {
           setIsLoading(true);
           const updatedModule = await authApi.getTrainingById(token, moduleId);
           setSelectedModule(updatedModule);
           const updatedModules = await authApi.getAllTrainingModules(token, agentId);
-          setModules(updatedModules.sort((a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)));
+          setModules(
+            updatedModules.sort(
+              (a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)
+            )
+          );
           setIsLoading(false);
         }
       } catch (error: any) {
-        console.error('Progress update failed:', error);
-        setAudioError('Failed to save your progress. Please try closing the module again or contact support if the issue persists.');
+        console.error("Progress update failed:", error);
+        setAudioError(
+          "Failed to save your progress. Please try closing the module again or contact support if the issue persists."
+        );
       }
     }
   };
+
 
   const handleModuleSelect = (moduleId: number) => {
     console.log('handleModuleSelect triggered for moduleId:', moduleId, 'current modules:', modules);
@@ -188,9 +216,26 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   console.log('Rendering - location:', location.pathname, 'modules:', modules, 'moduleId:', moduleId, 'selectedModule:', selectedModule, 'audioError:', audioError);
 
   // Convert seconds to decimal minutes (rounded to 2 decimal places)
-  const formatToMinutes = (seconds: number) => {
-    return (seconds / 60).toFixed(2);
+
+  // Force watch time to look like Duration
+  const formatTime = (seconds: number): string => {
+    if (!seconds || isNaN(seconds)) return "0:00";
+
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    // Only show hours if total time is >= 1 hour
+    if (hrs > 0) {
+      return `${hrs}:${mins.toString().padStart(2, "0")}:${secs
+        .toString()
+        .padStart(2, "0")}`;
+    }
+
+    //  Otherwise just MM:SS like your Duration field
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
+
 
   return (
     <MainCard
@@ -236,8 +281,8 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                           onClick={() => handleModuleSelect(module.moduleId)}
                         >
                           <Typography variant="h6">{module.title || 'Untitled'}</Typography>
-                          <Typography>Duration: {formatToMinutes(module.duration * 60)} mins</Typography>
-                          <Typography>Watch Time: {formatToMinutes(module.watchTime)} mins</Typography>
+                          <Typography>Duration: {formatTime(module.duration)}</Typography>
+                          <Typography>Watch Time: {formatTime(module.watchTime)}</Typography>
                           <Typography>Status: {module.status || 'Not Started'}</Typography>
                           {module.isComplete && (
                             <Typography color="success.main">Completed!</Typography>
@@ -281,16 +326,20 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                     }}
                     onEnded={() => {
                       if (selectedModule) {
-                        const fullDuration = selectedModule.duration * 60;
+                        // No multiply by 60 – duration is already in seconds
+                        const fullDuration = selectedModule.duration;
                         updateProgress(selectedModule.moduleId, fullDuration);
                       }
                     }}
-                    onLoadedMetadata={(e) => setAudioDuration(e.target.duration)}
+
                     onListen={(e) => {
-                      console.log('onListen event:', e);
+                      console.log("onListen event:", e);
                       if (e.target) {
                         let time = e.target.currentTime || 0;
-                        time = Math.min(time, audioDuration || selectedModule.duration * 60);
+
+                        //  Keep within audio duration or backend duration
+                        time = Math.min(time, audioDuration || selectedModule.duration);
+
                         setCurrentTime(Math.floor(isNaN(time) ? 0 : time));
                       }
                     }}
@@ -314,8 +363,11 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                     style={{ width: '100%' }} // Ensure player takes full width
                   />
                   <Box sx={{ p: 2, textAlign: 'center' }}>
-                    <Typography>Duration: {formatToMinutes(selectedModule.duration * 60)} mins</Typography>
-                    <Typography>Progress: {formatToMinutes(currentTime)} / {formatToMinutes(selectedModule.duration * 60)} mins</Typography>
+                    <Typography>Duration: {formatTime(selectedModule.duration)}</Typography>
+                    <Typography>
+                      Progress: {formatTime(currentTime)} / {formatTime(selectedModule.duration)}
+                    </Typography>
+
                     <Typography>Status: {selectedModule.status}</Typography>
                     {selectedModule.isComplete && (
                       <Button
