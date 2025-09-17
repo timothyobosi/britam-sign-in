@@ -16,6 +16,26 @@ interface TrainingAudioCardProps {
 }
 
 const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLoading = false }) => {
+  // Helper: get cached modules from localStorage
+  const getCachedModules = () => {
+    try {
+      const cached = localStorage.getItem('trainingModules_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          return parsed.map((m) => ({
+            ...m,
+            duration: normalizeToSeconds(m.duration),
+            watchTime: Math.min(normalizeToSeconds(m.watchTime), normalizeToSeconds(m.duration)),
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse cached modules:', e);
+    }
+    return [];
+  };
+
   const theme = useTheme();
   const jwtContext = React.useContext(JWTContext);
   const agentId = jwtContext && 'user' in jwtContext ? (jwtContext as any).user?.agentId : undefined;
@@ -25,7 +45,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   const { moduleId } = useParams<{ moduleId?: string }>();
   const match = useMatch('/training/:moduleId');
   const [isLoading, setIsLoading] = useState(propLoading);
-  const [modules, setModules] = useState<authApi.TrainingModule[]>([]);
+  const [modules, setModules] = useState<authApi.TrainingModule[]>(getCachedModules());
   const [selectedModule, setSelectedModule] = useState<authApi.TrainingModule | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const audioRef = useRef<ReactH5AudioPlayer | null>(null);
@@ -76,7 +96,13 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     const agentId = Number(jwtContext.user.agentId);
     const token = localStorage.getItem('serviceToken');
     if (!token) {
-      setAudioError('No valid token found.');
+      const cached = getCachedModules();
+      if (cached.length > 0) {
+        setModules(cached);
+        setAudioError('Loaded cached modules due to missing token.');
+      } else {
+        setAudioError('No valid token found.');
+      }
       setIsLoading(false);
       return;
     }
@@ -87,7 +113,6 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         const normalized = data.map((m) => {
           const duration = normalizeToSeconds(m.duration);
           const watchTime = normalizeToSeconds(m.watchTime);
-          // Cap watchTime at duration
           const cappedWatchTime = Math.min(watchTime, duration);
           console.log(
             `Module ${m.moduleId} - Title: ${m.title}, Raw duration: ${m.duration}, Normalized: ${duration}, Raw watchTime: ${m.watchTime}, Normalized: ${watchTime}, Capped: ${cappedWatchTime}`
@@ -98,13 +123,23 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
             watchTime: cappedWatchTime,
           };
         });
+        // Cache modules in localStorage
+        localStorage.setItem('trainingModules_cache', JSON.stringify(normalized));
         const sortedModules = normalized.sort(
           (a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)
         );
         setModules(sortedModules);
+        setAudioError(null);
       })
-      .catch(() => {
-        setAudioError(`Failed to load modules. Please try again later.`);
+      .catch((err) => {
+        console.error('Failed to fetch modules:', err);
+        const cached = getCachedModules();
+        if (cached.length > 0) {
+          setModules(cached);
+          setAudioError('Loaded cached modules due to network issue.');
+        } else {
+          setAudioError(`Failed to load modules: ${err.message}`);
+        }
       })
       .finally(() => setIsLoading(false));
   }, [jwtContext]);
@@ -116,38 +151,56 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     if (id && !isNaN(id) && token && match) {
       setIsLoading(true);
       console.log('Fetching module details for moduleId:', id);
-      authApi
-        .getTrainingById(token, id)
-        .then((module: authApi.TrainingModule) => {
-          const duration = normalizeToSeconds(module.duration);
-          const watchTime = normalizeToSeconds(module.watchTime);
-          const cappedWatchTime = Math.min(watchTime, duration);
-          const normalizedModule = {
-            ...module,
-            duration,
-            watchTime: cappedWatchTime,
-          };
-          console.log(
-            `Selected Module ${id} - Title: ${module.title}, Raw duration: ${module.duration}, Normalized: ${duration}, Raw watchTime: ${module.watchTime}, Normalized: ${watchTime}, Capped: ${cappedWatchTime}`
-          );
-          setSelectedModule(normalizedModule);
-          const savedProgress = localStorage.getItem(`audioProgress_${id}`);
-          setCurrentTime(savedProgress ? normalizeToSeconds(savedProgress) : cappedWatchTime || 0);
-          setInitialPlaybackTime(0);
-          setAudioDuration(0);
-          setAudioError(null);
-        })
-        .catch((error: any) => {
-          console.error('Error fetching module details:', error);
-          setAudioError(`Failed to load module ${id}. Please try again later.`);
-        })
-        .finally(() => setIsLoading(false));
+      // Check cache first
+      const cachedModules = getCachedModules();
+      const cachedModule = cachedModules.find((m) => m.moduleId === id);
+      if (cachedModule) {
+        console.log(`Loading cached module ${id}:`, cachedModule);
+        setSelectedModule(cachedModule);
+        const savedProgress = localStorage.getItem(`audioProgress_${id}`);
+        setCurrentTime(savedProgress ? normalizeToSeconds(savedProgress) : cachedModule.watchTime || 0);
+        setInitialPlaybackTime(0);
+        setAudioDuration(0);
+        setAudioError(null);
+        setIsLoading(false);
+      } else {
+        authApi
+          .getTrainingById(token, id)
+          .then((module: authApi.TrainingModule) => {
+            const duration = normalizeToSeconds(module.duration);
+            const watchTime = normalizeToSeconds(module.watchTime);
+            const cappedWatchTime = Math.min(watchTime, duration);
+            const normalizedModule = {
+              ...module,
+              duration,
+              watchTime: cappedWatchTime,
+            };
+            console.log(
+              `Selected Module ${id} - Title: ${module.title}, Raw duration: ${module.duration}, Normalized: ${duration}, Raw watchTime: ${module.watchTime}, Normalized: ${watchTime}, Capped: ${cappedWatchTime}`
+            );
+            setSelectedModule(normalizedModule);
+            // Update cache with new module data
+            const updatedCache = [...cachedModules.filter((m) => m.moduleId !== id), normalizedModule];
+            localStorage.setItem('trainingModules_cache', JSON.stringify(updatedCache));
+            const savedProgress = localStorage.getItem(`audioProgress_${id}`);
+            setCurrentTime(savedProgress ? normalizeToSeconds(savedProgress) : cappedWatchTime || 0);
+            setInitialPlaybackTime(0);
+            setAudioDuration(0);
+            setAudioError(null);
+          })
+          .catch((error: any) => {
+            console.error('Error fetching module details:', error);
+            setAudioError(`Failed to load module ${id}: ${error.message}`);
+          })
+          .finally(() => setIsLoading(false));
+      }
     } else {
       setSelectedModule(null);
       setCurrentTime(0);
       setInitialPlaybackTime(0);
       setAudioDuration(0);
       setAudioError(null);
+      setIsLoading(false);
     }
   }, [moduleId, token, match]);
 
@@ -207,6 +260,8 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
               watchTime: Math.min(modWatchTime, modDuration),
             };
           });
+          // Update cache
+          localStorage.setItem('trainingModules_cache', JSON.stringify(updatedModules));
           setModules(
             updatedModules.sort(
               (a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)
@@ -338,13 +393,8 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
             <Button variant="contained" onClick={handleTryAgain} sx={{ mt: 2 }}>
               Get back to Course Outline
             </Button>
-            {/* Temporary button to clear local storage for debugging */}
-            <Button
-              variant="outlined"
-              onClick={() => localStorage.clear()}
-              sx={{ mt: 2 }}
-            >
-              Clear Local Storage (Debug)
+            <Button variant="outlined" onClick={() => localStorage.clear()} sx={{ mt: 2, ml: 2 }}>
+              Clear Cache (Debug)
             </Button>
           </Box>
         ) : (

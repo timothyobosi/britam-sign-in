@@ -23,49 +23,78 @@ const Analytics = () => {
 
     // State with persistence from localStorage
     const [scores, setScores] = useState<any[]>(() => {
-        const saved = localStorage.getItem('analytics_scores');
-        return saved ? JSON.parse(saved) : [];
+        try {
+            const saved = localStorage.getItem('analytics_scores');
+            return saved ? JSON.parse(saved) : [];
+        } catch (e) {
+            console.error('Failed to parse analytics_scores:', e);
+            localStorage.removeItem('analytics_scores');
+            return [];
+        }
     });
-    const [questions, setQuestions] = useState<any[]>(() => {
-        const saved = localStorage.getItem('analytics_questions');
-        return saved ? JSON.parse(saved) : [];
-    });
+    const [questions, setQuestions] = useState<any[]>([]);
     const [selectedModule, setSelectedModule] = useState<number | null>(() => {
         const saved = localStorage.getItem('analytics_selectedModule');
         return saved ? Number(saved) : null;
     });
     const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>(() => {
-        const saved = localStorage.getItem('analytics_selectedAnswers');
-        return saved ? JSON.parse(saved) : {};
+        try {
+            const saved = localStorage.getItem('analytics_selectedAnswers');
+            return saved ? JSON.parse(saved) : {};
+        } catch (e) {
+            console.error('Failed to parse analytics_selectedAnswers:', e);
+            localStorage.removeItem('analytics_selectedAnswers');
+            return {};
+        }
     });
     const [isSubmitted, setIsSubmitted] = useState<Record<number, boolean>>(() => {
-        const saved = localStorage.getItem('analytics_isSubmitted');
-        return saved ? JSON.parse(saved) : {};
+        try {
+            const saved = localStorage.getItem('analytics_isSubmitted');
+            return saved ? JSON.parse(saved) : {};
+        } catch (e) {
+            console.error('Failed to parse analytics_isSubmitted:', e);
+            localStorage.removeItem('analytics_isSubmitted');
+            return {};
+        }
     });
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     // Persist state to localStorage whenever it changes
     useEffect(() => {
-        localStorage.setItem('analytics_scores', JSON.stringify(scores));
+        try {
+            localStorage.setItem('analytics_scores', JSON.stringify(scores));
+        } catch (e) {
+            console.error('Failed to save analytics_scores:', e);
+        }
     }, [scores]);
 
     useEffect(() => {
-        localStorage.setItem('analytics_questions', JSON.stringify(questions));
-    }, [questions]);
-
-    useEffect(() => {
-        if (selectedModule !== null) {
-            localStorage.setItem('analytics_selectedModule', String(selectedModule));
+        try {
+            if (selectedModule !== null) {
+                localStorage.setItem('analytics_selectedModule', String(selectedModule));
+            } else {
+                localStorage.removeItem('analytics_selectedModule');
+            }
+        } catch (e) {
+            console.error('Failed to save analytics_selectedModule:', e);
         }
     }, [selectedModule]);
 
     useEffect(() => {
-        localStorage.setItem('analytics_selectedAnswers', JSON.stringify(selectedAnswers));
+        try {
+            localStorage.setItem('analytics_selectedAnswers', JSON.stringify(selectedAnswers));
+        } catch (e) {
+            console.error('Failed to save analytics_selectedAnswers:', e);
+        }
     }, [selectedAnswers]);
 
     useEffect(() => {
-        localStorage.setItem('analytics_isSubmitted', JSON.stringify(isSubmitted));
+        try {
+            localStorage.setItem('analytics_isSubmitted', JSON.stringify(isSubmitted));
+        } catch (e) {
+            console.error('Failed to save analytics_isSubmitted:', e);
+        }
     }, [isSubmitted]);
 
     // Fetch scores on mount or auth change
@@ -76,7 +105,13 @@ const Analytics = () => {
                 try {
                     const scorePromises = [1, 2, 3, 4].map((moduleId) => authApi.getQuizScore(token, agentId, moduleId));
                     const scoreData = await Promise.all(scorePromises);
+                    console.log('Fetched scores:', scoreData);
                     setScores(scoreData);
+                    try {
+                        localStorage.setItem('analytics_scores', JSON.stringify(scoreData));
+                    } catch (e) {
+                        console.error('Failed to save analytics_scores:', e);
+                    }
                     const submittedState = scoreData.reduce(
                         (acc, score, index) => ({
                             ...acc,
@@ -85,7 +120,13 @@ const Analytics = () => {
                         {}
                     );
                     setIsSubmitted(submittedState);
+                    try {
+                        localStorage.setItem('analytics_isSubmitted', JSON.stringify(submittedState));
+                    } catch (e) {
+                        console.error('Failed to save analytics_isSubmitted:', e);
+                    }
                 } catch (err: any) {
+                    console.error('Failed to fetch scores:', err);
                     setError('Failed to fetch scores: ' + err.message);
                 } finally {
                     setIsLoading(false);
@@ -107,11 +148,17 @@ const Analytics = () => {
         }
 
         setSelectedModule(moduleId);
+        setQuestions([]); // Reset questions to avoid stale data
+        setSelectedAnswers({}); // Reset answers
         setIsLoading(true);
         try {
+            if (!token) throw new Error('No valid token');
+            console.log(`Fetching questions for module ${moduleId}`);
             const data = await authApi.getQuizQuestions(token, moduleId);
+            console.log(`Fetched questions for module ${moduleId}:`, data);
             setQuestions(data);
         } catch (err: any) {
+            console.error(`Failed to fetch questions for module ${moduleId}:`, err);
             setError('Failed to fetch questions: ' + err.message);
         } finally {
             setIsLoading(false);
@@ -147,20 +194,41 @@ const Analytics = () => {
                 questionId: q.questionid,
                 selectedAnswer: selectedAnswers[q.questionid]
             }));
-            await authApi.submitQuizAnswers(token, agentId, selectedModule, answers);
-            const updatedScores = await authApi.getQuizScore(token, agentId, selectedModule);
+            if (!token) throw new Error('No valid token');
+            console.log(`Submitting answers for module ${selectedModule}:`, answers);
+            await authApi.submitQuizAnswers(token, Number(agentId), selectedModule, answers);
+            const updatedScores = await authApi.getQuizScore(token, Number(agentId), selectedModule);
+            console.log(`Updated scores for module ${selectedModule}:`, updatedScores);
             setScores((prev) =>
                 prev.map((score, index) => (index + 1 === selectedModule ? updatedScores : score))
             );
+            try {
+                localStorage.setItem('analytics_scores', JSON.stringify(scores));
+            } catch (e) {
+                console.error('Failed to save analytics_scores:', e);
+            }
             setIsSubmitted((prev) => ({ ...prev, [selectedModule]: true }));
+            try {
+                localStorage.setItem('analytics_isSubmitted', JSON.stringify({ ...isSubmitted, [selectedModule]: true }));
+            } catch (e) {
+                console.error('Failed to save analytics_isSubmitted:', e);
+            }
         } catch (err: any) {
+            console.error('Failed to submit answers:', err);
             setError('Failed to submit answers: ' + err.message);
         } finally {
             setIsLoading(false);
         }
     };
 
-    if (error) return <Typography color="error">{error}</Typography>;
+    if (error) return (
+        <Box sx={{ textAlign: 'center' }}>
+            <Typography color="error">{error}</Typography>
+            <Button variant="contained" onClick={() => setError(null)} sx={{ mt: 2 }}>
+                Clear Error
+            </Button>
+        </Box>
+    );
     if (isLoading) return <CircularProgress />;
 
     return (
@@ -208,39 +276,43 @@ const Analytics = () => {
 
                             <Box sx={{ mt: 2 }}>
                                 <Grid container spacing={2}>
-                                    {questions.map((q) => (
-                                        <Grid item xs={12} key={q.questionid}>
-                                            <FormControl fullWidth sx={{ mb: 3 }}>
-                                                <FormLabel>{q.text}</FormLabel>
-                                                <RadioGroup
-                                                    value={selectedAnswers[q.questionid] || ''}
-                                                    onChange={(e) =>
-                                                        handleAnswerChange(q.questionid, parseInt(e.target.value))
-                                                    }
-                                                    disabled={isSubmitted[selectedModule]}
-                                                >
-                                                    {q.options.map((opt) => (
-                                                        <FormControlLabel
-                                                            key={opt.optionid}
-                                                            value={opt.optionid}
-                                                            control={<Radio />}
-                                                            label={opt.text}
-                                                        />
-                                                    ))}
-                                                </RadioGroup>
-                                                {!isSubmitted[selectedModule] && (
-                                                    <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 1 }}>
-                                                        <Button
-                                                            onClick={() => handleClearSelection(q.questionid)}
-                                                            variant="text"
-                                                        >
-                                                            Clear Selection
-                                                        </Button>
-                                                    </Box>
-                                                )}
-                                            </FormControl>
-                                        </Grid>
-                                    ))}
+                                    {questions.length > 0 ? (
+                                        questions.map((q) => (
+                                            <Grid item xs={12} key={q.questionid}>
+                                                <FormControl fullWidth sx={{ mb: 3 }}>
+                                                    <FormLabel>{q.text}</FormLabel>
+                                                    <RadioGroup
+                                                        value={selectedAnswers[q.questionid] || ''}
+                                                        onChange={(e) =>
+                                                            handleAnswerChange(q.questionid, parseInt(e.target.value))
+                                                        }
+                                                    >
+                                                        {(q.options as Array<{ optionid: number; text: string }> || []).map((opt) => (
+                                                            <FormControlLabel
+                                                                key={opt.optionid}
+                                                                value={opt.optionid}
+                                                                control={<Radio />}
+                                                                label={opt.text}
+                                                                disabled={isSubmitted[selectedModule]}
+                                                            />
+                                                        ))}
+                                                    </RadioGroup>
+                                                    {!isSubmitted[selectedModule] && (
+                                                        <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 1 }}>
+                                                            <Button
+                                                                onClick={() => handleClearSelection(q.questionid)}
+                                                                variant="text"
+                                                            >
+                                                                Clear Selection
+                                                            </Button>
+                                                        </Box>
+                                                    )}
+                                                </FormControl>
+                                            </Grid>
+                                        ))
+                                    ) : (
+                                        <Typography>No questions available for this module.</Typography>
+                                    )}
                                 </Grid>
 
                                 {!isSubmitted[selectedModule] ? (
@@ -248,7 +320,7 @@ const Analytics = () => {
                                         onClick={handleSubmitAll}
                                         variant="contained"
                                         sx={{ mt: 2 }}
-                                        disabled={questions.length !== Object.keys(selectedAnswers).length}
+                                        disabled={questions.length !== Object.keys(selectedAnswers).length || questions.length === 0}
                                     >
                                         Submit All
                                     </Button>
