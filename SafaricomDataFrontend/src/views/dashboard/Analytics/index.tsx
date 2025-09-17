@@ -59,6 +59,7 @@ const Analytics = () => {
     });
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [trainingModules, setTrainingModules] = useState<authApi.TrainingModule[]>([]);
 
     // Persist state to localStorage whenever it changes
     useEffect(() => {
@@ -97,12 +98,17 @@ const Analytics = () => {
         }
     }, [isSubmitted]);
 
-    // Fetch scores on mount or auth change
+    // Fetch scores and training modules on mount or auth change
     useEffect(() => {
         if (agentId && token) {
             setIsLoading(true);
-            const fetchScores = async () => {
+            const fetchData = async () => {
                 try {
+                    // Fetch training modules
+                    const modulesData = await authApi.getAllTrainingModules(token, Number(agentId));
+                    setTrainingModules(modulesData);
+
+                    // Fetch scores
                     const scorePromises = [1, 2, 3, 4].map((moduleId) => authApi.getQuizScore(token, agentId, moduleId));
                     const scoreData = await Promise.all(scorePromises);
                     console.log('Fetched scores:', scoreData);
@@ -126,13 +132,13 @@ const Analytics = () => {
                         console.error('Failed to save analytics_isSubmitted:', e);
                     }
                 } catch (err: any) {
-                    console.error('Failed to fetch scores:', err);
-                    setError('Failed to fetch scores: ' + err.message);
+                    console.error('Failed to fetch data:', err);
+                    setError('Failed to fetch data: ' + err.message);
                 } finally {
                     setIsLoading(false);
                 }
             };
-            fetchScores();
+            fetchData();
         } else {
             setError('No valid user or token found.');
             setIsLoading(false);
@@ -144,6 +150,13 @@ const Analytics = () => {
             setSelectedModule(null);
             setQuestions([]);
             setSelectedAnswers({});
+            return;
+        }
+
+        // Check if all training modules are completed
+        const allCompleted = trainingModules.every((module) => module.isComplete);
+        if (!allCompleted) {
+            setError('Please complete all training modules before starting the test.');
             return;
         }
 
@@ -246,6 +259,7 @@ const Analytics = () => {
                                 onClick={() => handleModuleClick(moduleId)}
                                 variant="contained"
                                 sx={{ mt: 2 }}
+                                disabled={!trainingModules.every((module) => module.isComplete)}
                             >
                                 Open Questions
                             </Button>
