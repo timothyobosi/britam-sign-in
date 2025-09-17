@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '@mui/material/styles';
 import Grid from '@mui/material/Grid';
@@ -21,14 +20,55 @@ const Analytics = () => {
     const { user } = React.useContext(JWTContext);
     const agentId = user?.agentId;
     const token = localStorage.getItem('serviceToken');
-    const [scores, setScores] = useState<any[]>([]);
-    const [questions, setQuestions] = useState<any[]>([]);
-    const [selectedModule, setSelectedModule] = useState<number | null>(null);
-    const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
-    const [isSubmitted, setIsSubmitted] = useState<Record<number, boolean>>({});
+
+    // State with persistence from localStorage
+    const [scores, setScores] = useState<any[]>(() => {
+        const saved = localStorage.getItem('analytics_scores');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [questions, setQuestions] = useState<any[]>(() => {
+        const saved = localStorage.getItem('analytics_questions');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [selectedModule, setSelectedModule] = useState<number | null>(() => {
+        const saved = localStorage.getItem('analytics_selectedModule');
+        return saved ? Number(saved) : null;
+    });
+    const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>(() => {
+        const saved = localStorage.getItem('analytics_selectedAnswers');
+        return saved ? JSON.parse(saved) : {};
+    });
+    const [isSubmitted, setIsSubmitted] = useState<Record<number, boolean>>(() => {
+        const saved = localStorage.getItem('analytics_isSubmitted');
+        return saved ? JSON.parse(saved) : {};
+    });
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // Persist state to localStorage whenever it changes
+    useEffect(() => {
+        localStorage.setItem('analytics_scores', JSON.stringify(scores));
+    }, [scores]);
+
+    useEffect(() => {
+        localStorage.setItem('analytics_questions', JSON.stringify(questions));
+    }, [questions]);
+
+    useEffect(() => {
+        if (selectedModule !== null) {
+            localStorage.setItem('analytics_selectedModule', String(selectedModule));
+        }
+    }, [selectedModule]);
+
+    useEffect(() => {
+        localStorage.setItem('analytics_selectedAnswers', JSON.stringify(selectedAnswers));
+    }, [selectedAnswers]);
+
+    useEffect(() => {
+        localStorage.setItem('analytics_isSubmitted', JSON.stringify(isSubmitted));
+    }, [isSubmitted]);
+
+    // Fetch scores on mount or auth change
     useEffect(() => {
         if (agentId && token) {
             setIsLoading(true);
@@ -79,12 +119,12 @@ const Analytics = () => {
     };
 
     const handleAnswerChange = (questionId: number, optionId: number) => {
-        if (isSubmitted[selectedModule!]) return;
+        if (isSubmitted[selectedModule!] || !selectedModule) return;
         setSelectedAnswers((prev) => ({ ...prev, [questionId]: optionId }));
     };
 
     const handleClearSelection = (questionId: number) => {
-        if (isSubmitted[selectedModule!]) return;
+        if (isSubmitted[selectedModule!] || !selectedModule) return;
         setSelectedAnswers((prev) => {
             const newAnswers = { ...prev };
             delete newAnswers[questionId];
@@ -103,7 +143,6 @@ const Analytics = () => {
 
         setIsLoading(true);
         try {
-            // Submit all answers for the selected module
             const answers = questions.map((q) => ({
                 questionId: q.questionid,
                 selectedAnswer: selectedAnswers[q.questionid]
@@ -191,12 +230,12 @@ const Analytics = () => {
                                                 </RadioGroup>
                                                 {!isSubmitted[selectedModule] && (
                                                     <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 1 }}>
-                                                    <Button
-                                                        onClick={() => handleClearSelection(q.questionid)}
-                                                        variant="text"
-                                                    >
-                                                        Clear Selection
-                                                    </Button>
+                                                        <Button
+                                                            onClick={() => handleClearSelection(q.questionid)}
+                                                            variant="text"
+                                                        >
+                                                            Clear Selection
+                                                        </Button>
                                                     </Box>
                                                 )}
                                             </FormControl>
@@ -219,7 +258,6 @@ const Analytics = () => {
                                     </Typography>
                                 )}
                             </Box>
-
                         </MainCard>
                     </Collapse>
                 </Grid>}

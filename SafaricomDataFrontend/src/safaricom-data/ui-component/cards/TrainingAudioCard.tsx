@@ -29,34 +29,38 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   const [selectedModule, setSelectedModule] = useState<authApi.TrainingModule | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const audioRef = useRef<ReactH5AudioPlayer | null>(null);
-  const [currentTime, setCurrentTime] = useState<number>(0);
+  // Persist audio progress in localStorage
+  const [currentTime, setCurrentTime] = useState<number>(() => {
+    if (moduleId) {
+      const saved = localStorage.getItem(`audioProgress_${moduleId}`);
+      return saved ? Number(saved) : 0;
+    }
+    return 0;
+  });
   const [initialPlaybackTime, setInitialPlaybackTime] = useState<number>(0);
   const [audioDuration, setAudioDuration] = useState<number>(0);
 
   // Fetch all modules
   useEffect(() => {
-    console.log('useEffect triggered for modules - jwtContext:', jwtContext, 'agentId:', agentId, 'token:', token);
+    if (!jwtContext || !jwtContext.isInitialized || !jwtContext.user) return;
+  const agentId = Number(jwtContext.user.agentId);
+    const token = localStorage.getItem('serviceToken');
     if (!token) {
-      console.log('No token found');
       setAudioError('No valid token found.');
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
-    console.log('Fetching all modules...');
     authApi.getAllTrainingModules(token, agentId)
       .then((data: authApi.TrainingModule[]) => {
-        console.log('Modules data received:', data);
         const sortedModules = data.sort((a: authApi.TrainingModule, b: authApi.TrainingModule) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId));
-        console.log('Sorted modules:', sortedModules);
         setModules(sortedModules);
       })
       .catch((error: any) => {
-        console.error('Error fetching modules:', error);
         setAudioError(`Failed to load modules. Please try again later.`);
       })
       .finally(() => setIsLoading(false));
-  }, [agentId, token]);
+  }, [jwtContext]);
 
   // Fetch selected module details when moduleId changes
   useEffect(() => {
@@ -69,7 +73,9 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         .then((module: authApi.TrainingModule) => {
           console.log('Module details fetched:', module);
           setSelectedModule(module);
-          setCurrentTime(module.watchTime || 0); // Initialize with watchTime in seconds
+          // Restore progress from localStorage if available
+          const savedProgress = localStorage.getItem(`audioProgress_${id}`);
+          setCurrentTime(savedProgress ? Number(savedProgress) : (module.watchTime || 0));
           setInitialPlaybackTime(0);
           setAudioDuration(0);
           setAudioError(null);
@@ -87,6 +93,13 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       setAudioError(null);
     }
   }, [moduleId, token, match]);
+
+  // Save audio progress to localStorage whenever currentTime changes
+  useEffect(() => {
+    if (moduleId) {
+      localStorage.setItem(`audioProgress_${moduleId}`, String(currentTime));
+    }
+  }, [currentTime, moduleId]);
 
 
 

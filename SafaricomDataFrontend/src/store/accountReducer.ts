@@ -30,9 +30,9 @@ const accountReducer = (state = initialState, action) => {
         case LOGOUT: {
             return {
                 ...state,
-                isInitialized: true,
-                isLoggedIn: false,
-                user: null
+                isInitialized: action.payload?.isInitialized ?? true,
+                isLoggedIn: action.payload?.isLoggedIn ?? false,
+                user: action.payload?.user ?? null
             };
         }
         default: {

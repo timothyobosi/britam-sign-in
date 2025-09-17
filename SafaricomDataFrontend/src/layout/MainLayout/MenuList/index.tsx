@@ -1,4 +1,5 @@
 import { memo, useLayoutEffect, useState } from 'react';
+import { ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import List from '@mui/material/List';
@@ -13,26 +14,43 @@ import { HORIZONTAL_MAX_ITEM } from 'config';
 import { useGetMenu, useGetMenuMaster } from 'api/menu';
 
 const MenuList = () => {
-    const downMD = useMediaQuery((theme) => theme.breakpoints.down('md'));
+    const downMD = useMediaQuery((theme: any) => theme.breakpoints.down('md'));
 
     const { menuOrientation } = useConfig();
     const { menuLoading } = useGetMenu();
     const { menuMaster } = useGetMenuMaster();
-    const drawerOpen = menuMaster.isDashboardDrawerOpened;
+    const drawerOpen = menuMaster?.isDashboardDrawerOpened;
     const isHorizontal = menuOrientation === MenuOrientation.HORIZONTAL && !downMD;
 
-    const [selectedID, setSelectedID] = useState('');
-    const [menuItems, setMenuItems] = useState({ items: [] });
+    // Persist sidebar selection in localStorage
+    const [selectedID, setSelectedID] = useState(() => {
+        return localStorage.getItem('sidebarSelection') || '';
+    });
+    type MenuItemType = {
+        id: string;
+        title: string | ReactNode;
+        icon?: any;
+        type: string;
+        children?: MenuItemType[];
+        url?: string;
+    };
+
+    const [menuItems, setMenuItems] = useState<{ items: MenuItemType[] }>({ items: [] });
 
     useLayoutEffect(() => {
         setMenuItems({ items: [...menuItem.items] });
     }, [menuLoading]);
 
+    // Persist selectedID to localStorage whenever it changes
+    useLayoutEffect(() => {
+        localStorage.setItem('sidebarSelection', selectedID);
+    }, [selectedID]);
+
     const lastItem = isHorizontal ? HORIZONTAL_MAX_ITEM : null;
 
     let lastItemIndex = menuItems.items.length - 1;
-    let remItems;
-    let lastItemId;
+    let remItems: any;
+    let lastItemId: string | undefined;
 
     if (lastItem && lastItem < menuItems.items.length) {
         lastItemId = menuItems.items[lastItem - 1].id;

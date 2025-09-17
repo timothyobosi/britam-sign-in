@@ -7,6 +7,7 @@ import { jwtDecode } from 'jwt-decode';
 
 // reducer - state management
 import { LOGIN, LOGOUT } from 'store/actions';
+const BASE_URL = import.meta.env.VITE_API_TARGET + import.meta.env.VITE_API_BASE_URL;
 import accountReducer from 'store/accountReducer';
 
 // project imports
@@ -16,7 +17,18 @@ import axios from 'utils/axios';
 const chance = new Chance();
 
 // constant
-const initialState = {
+interface UserType {
+    agentId?: string;
+    [key: string]: any;
+}
+
+interface StateType {
+    isLoggedIn: boolean;
+    isInitialized: boolean;
+    user: UserType | null;
+}
+
+const initialState: StateType = {
     isLoggedIn: false,
     isInitialized: false,
     user: null
@@ -41,7 +53,14 @@ const setSession = (serviceToken: string | null) => {
 };
 
 // ==============================|| JWT CONTEXT & PROVIDER ||============================== //
-const JWTContext = createContext(null);
+const JWTContext = createContext<StateType & {
+    login: (email: string, password: string) => Promise<void>;
+    logout: () => void;
+    register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
+    resetPassword: (email: string) => Promise<void>;
+    completeResetPassword: (token: string, newPassword: string, email: string) => Promise<void>;
+    updateProfile: () => void;
+} | null>(null);
 
 export const JWTProvider = ({ children }) => {
     const [state, dispatch] = useReducer(accountReducer, initialState);
@@ -52,46 +71,60 @@ export const JWTProvider = ({ children }) => {
                 const serviceToken = window.localStorage.getItem('serviceToken');
                 if (serviceToken && verifyToken(serviceToken)) {
                     setSession(serviceToken);
-
-                    // Adjust this if your backend has a "me" endpoint for Agents
-                    // e.g. /me or /profile
-                    const response = await axios.get('/me'); 
-                    const { user } = response.data;
-
+                    // Decode agent info from JWT
+                    const decoded: any = jwtDecode(serviceToken);
+                    const user = {
+                        agentId: decoded.AgentId,
+                        name: decoded.Name,
+                        role: decoded["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || decoded.role,
+                        email: decoded.sub
+                    };
                     dispatch({
                         type: LOGIN,
                         payload: {
                             isLoggedIn: true,
-                            user
+                            user,
+                            isInitialized: true
                         }
                     });
                 } else {
+                    if (!serviceToken) {
+                        console.error('No serviceToken found in localStorage');
+                    } else {
+                        console.error('Token found but not valid:', serviceToken);
+                    }
                     dispatch({
-                        type: LOGOUT
+                        type: LOGOUT,
+                        payload: { isInitialized: true, user: null, isLoggedIn: false }
                     });
                 }
             } catch (err) {
-                console.error(err);
+                console.error('JWTContext init error:', err);
                 dispatch({
-                    type: LOGOUT
+                    type: LOGOUT,
+                    payload: { isInitialized: true, user: null, isLoggedIn: false }
                 });
             }
         };
-
         init();
     }, []);
 
     const login = async (email: string, password: string) => {
-        const response = await axios.post('/login', { email, password });
-        const { token, ...user } = response.data;
-
+    const response = await axios.post(`${BASE_URL}/login`, { email, password });
+        const { token, agentId, name, role } = response.data;
         setSession(token);
-
+        const user = {
+            agentId,
+            name,
+            role,
+            email
+        };
         dispatch({
             type: LOGIN,
             payload: {
                 isLoggedIn: true,
-                user
+                user,
+                isInitialized: true
             }
         });
     };
@@ -127,8 +160,11 @@ export const JWTProvider = ({ children }) => {
     };
 
     const logout = () => {
-        setSession(null);
-        dispatch({ type: LOGOUT });
+    setSession(null);
+    // Clear sidebar selection and form progress persistence
+    localStorage.removeItem('sidebarSelection');
+    localStorage.removeItem('formProgress');
+    dispatch({ type: LOGOUT });
     };
 
     const resetPassword = async (email: string) => {
