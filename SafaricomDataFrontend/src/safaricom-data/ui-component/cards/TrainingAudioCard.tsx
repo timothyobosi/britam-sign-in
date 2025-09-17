@@ -1,8 +1,8 @@
 import PropTypes from 'prop-types';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '@mui/material/styles';
-import { Box, Button, Grid, Typography, CircularProgress, IconButton } from '@mui/material';
-import { FaPause, FaPlay, FaUndo, FaArrowRight } from 'react-icons/fa';
+import { Box, Button, Grid, Typography, IconButton } from '@mui/material';
+import { FaUndo, FaArrowRight } from 'react-icons/fa';
 import { useNavigate, useLocation, useParams, useMatch } from 'react-router-dom';
 import MainCard from 'ui-component/cards/MainCard';
 import SkeletonTotalOrderCard from 'ui-component/cards/Skeleton/EarningCard';
@@ -29,21 +29,51 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   const [selectedModule, setSelectedModule] = useState<authApi.TrainingModule | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const audioRef = useRef<ReactH5AudioPlayer | null>(null);
-  // Persist audio progress in localStorage
   const [currentTime, setCurrentTime] = useState<number>(() => {
     if (moduleId) {
       const saved = localStorage.getItem(`audioProgress_${moduleId}`);
-      return saved ? Number(saved) : 0;
+      return saved ? normalizeToSeconds(saved) : 0;
     }
     return 0;
   });
   const [initialPlaybackTime, setInitialPlaybackTime] = useState<number>(0);
   const [audioDuration, setAudioDuration] = useState<number>(0);
 
+  // Normalize time to seconds (handles MM:SS strings or numbers as seconds)
+  const normalizeToSeconds = (value: any): number => {
+    if (!value) return 0;
+
+    if (typeof value === 'number' && !isNaN(value)) {
+      return Math.floor(value); // Assume number is in seconds
+    }
+
+    if (typeof value === 'string') {
+      // Expect MM:SS format
+      const parts = value.split(':').map(Number).filter(n => !isNaN(n));
+      if (parts.length === 2) {
+        const [m, s] = parts;
+        return m * 60 + s;
+      }
+      console.warn(`Invalid time format for value: ${value}`);
+    }
+
+    return 0; // Fallback for invalid input
+  };
+
+  // Format seconds to MM:SS
+  const formatTime = (seconds: number): string => {
+    if (!seconds || isNaN(seconds)) return '0:00';
+
+    const totalSeconds = Math.floor(seconds);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Fetch all modules
   useEffect(() => {
     if (!jwtContext || !jwtContext.isInitialized || !jwtContext.user) return;
-  const agentId = Number(jwtContext.user.agentId);
+    const agentId = Number(jwtContext.user.agentId);
     const token = localStorage.getItem('serviceToken');
     if (!token) {
       setAudioError('No valid token found.');
@@ -51,12 +81,29 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       return;
     }
     setIsLoading(true);
-    authApi.getAllTrainingModules(token, agentId)
+    authApi
+      .getAllTrainingModules(token, agentId)
       .then((data: authApi.TrainingModule[]) => {
-        const sortedModules = data.sort((a: authApi.TrainingModule, b: authApi.TrainingModule) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId));
+        const normalized = data.map((m) => {
+          const duration = normalizeToSeconds(m.duration);
+          const watchTime = normalizeToSeconds(m.watchTime);
+          // Cap watchTime at duration
+          const cappedWatchTime = Math.min(watchTime, duration);
+          console.log(
+            `Module ${m.moduleId} - Title: ${m.title}, Raw duration: ${m.duration}, Normalized: ${duration}, Raw watchTime: ${m.watchTime}, Normalized: ${watchTime}, Capped: ${cappedWatchTime}`
+          );
+          return {
+            ...m,
+            duration,
+            watchTime: cappedWatchTime,
+          };
+        });
+        const sortedModules = normalized.sort(
+          (a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)
+        );
         setModules(sortedModules);
       })
-      .catch((error: any) => {
+      .catch(() => {
         setAudioError(`Failed to load modules. Please try again later.`);
       })
       .finally(() => setIsLoading(false));
@@ -69,13 +116,23 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     if (id && !isNaN(id) && token && match) {
       setIsLoading(true);
       console.log('Fetching module details for moduleId:', id);
-      authApi.getTrainingById(token, id)
+      authApi
+        .getTrainingById(token, id)
         .then((module: authApi.TrainingModule) => {
-          console.log('Module details fetched:', module);
-          setSelectedModule(module);
-          // Restore progress from localStorage if available
+          const duration = normalizeToSeconds(module.duration);
+          const watchTime = normalizeToSeconds(module.watchTime);
+          const cappedWatchTime = Math.min(watchTime, duration);
+          const normalizedModule = {
+            ...module,
+            duration,
+            watchTime: cappedWatchTime,
+          };
+          console.log(
+            `Selected Module ${id} - Title: ${module.title}, Raw duration: ${module.duration}, Normalized: ${duration}, Raw watchTime: ${module.watchTime}, Normalized: ${watchTime}, Capped: ${cappedWatchTime}`
+          );
+          setSelectedModule(normalizedModule);
           const savedProgress = localStorage.getItem(`audioProgress_${id}`);
-          setCurrentTime(savedProgress ? Number(savedProgress) : (module.watchTime || 0));
+          setCurrentTime(savedProgress ? normalizeToSeconds(savedProgress) : cappedWatchTime || 0);
           setInitialPlaybackTime(0);
           setAudioDuration(0);
           setAudioError(null);
@@ -96,48 +153,60 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   // Save audio progress to localStorage whenever currentTime changes
   useEffect(() => {
-    if (moduleId) {
-      localStorage.setItem(`audioProgress_${moduleId}`, String(currentTime));
+    if (moduleId && selectedModule) {
+      const cappedCurrentTime = Math.min(currentTime, selectedModule.duration);
+      localStorage.setItem(`audioProgress_${moduleId}`, String(cappedCurrentTime));
     }
-  }, [currentTime, moduleId]);
-
-
+  }, [currentTime, moduleId, selectedModule]);
 
   // Save module progress
   const updateProgress = async (moduleId: number, watchedSeconds: number) => {
     if (token && selectedModule) {
       try {
-        const validWatchedSeconds = Math.max(
-          0,
-          Number.isFinite(watchedSeconds) ? watchedSeconds : 0
-        );
+        const validWatchedSeconds = Math.max(0, Number.isFinite(watchedSeconds) ? watchedSeconds : 0);
         const sessionTime = Math.max(0, validWatchedSeconds - initialPlaybackTime);
+        const normalizedWatchTime = normalizeToSeconds(selectedModule.watchTime);
+        const normalizedDuration = normalizeToSeconds(selectedModule.duration);
 
-        //  Cap watch time at duration (already in seconds)
-        let newWatchTime = (selectedModule.watchTime) + sessionTime;
-        newWatchTime = Math.min(newWatchTime, selectedModule.duration);
+        // Cap watch time at duration
+        let newWatchTime = normalizedWatchTime + sessionTime;
+        newWatchTime = Math.min(newWatchTime, normalizedDuration);
 
         console.log(
-          "Updating progress - moduleId:",
+          'Updating progress - moduleId:',
           moduleId,
-          "sessionTime:",
+          'sessionTime:',
           sessionTime,
-          "newWatchTime:",
+          'newWatchTime:',
           newWatchTime
         );
 
-        const response = await authApi.updateTrainingProgress(
-          token,
-          moduleId,
-          newWatchTime
-        );
-        console.log("Progress update response:", response);
+        const response = await authApi.updateTrainingProgress(token, moduleId, newWatchTime);
+        console.log('Progress update response:', response);
 
         if (moduleId) {
           setIsLoading(true);
-          const updatedModule = await authApi.getTrainingById(token, moduleId);
+          const updatedModuleRaw = await authApi.getTrainingById(token, moduleId);
+          const duration = normalizeToSeconds(updatedModuleRaw.duration);
+          const watchTime = normalizeToSeconds(updatedModuleRaw.watchTime);
+          const cappedWatchTime = Math.min(watchTime, duration);
+          const updatedModule = {
+            ...updatedModuleRaw,
+            duration,
+            watchTime: cappedWatchTime,
+          };
           setSelectedModule(updatedModule);
-          const updatedModules = await authApi.getAllTrainingModules(token, agentId);
+
+          const updatedModulesRaw = await authApi.getAllTrainingModules(token, agentId);
+          const updatedModules = updatedModulesRaw.map((m) => {
+            const modDuration = normalizeToSeconds(m.duration);
+            const modWatchTime = normalizeToSeconds(m.watchTime);
+            return {
+              ...m,
+              duration: modDuration,
+              watchTime: Math.min(modWatchTime, modDuration),
+            };
+          });
           setModules(
             updatedModules.sort(
               (a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)
@@ -146,14 +215,13 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
           setIsLoading(false);
         }
       } catch (error: any) {
-        console.error("Progress update failed:", error);
+        console.error('Progress update failed:', error);
         setAudioError(
-          "Failed to save your progress. Please try closing the module again or contact support if the issue persists."
+          'Failed to save your progress. Please try closing the module again or contact support if the issue persists.'
         );
       }
     }
   };
-
 
   const handleModuleSelect = (moduleId: number) => {
     console.log('handleModuleSelect triggered for moduleId:', moduleId, 'current modules:', modules);
@@ -177,20 +245,15 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     if (audioRef.current?.audio && selectedModule) {
       const watchedSeconds = Math.floor(audioRef.current.audio.currentTime || currentTime);
       updateProgress(selectedModule.moduleId, watchedSeconds);
-    } else {
-      // Fallback to currentTime if audioRef is not ready
-      if (selectedModule) {
-        updateProgress(selectedModule.moduleId, currentTime);
-      }
+    } else if (selectedModule) {
+      updateProgress(selectedModule.moduleId, currentTime);
     }
-    // Clear error and navigate back to the modules list page
     setAudioError(null);
     navigate('/training');
     setSelectedModule(null);
   };
 
   const handleTryAgain = () => {
-    // Mimic handleClose behavior: update progress (if possible) and navigate back
     if (selectedModule) {
       updateProgress(selectedModule.moduleId, currentTime);
     }
@@ -214,8 +277,10 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   const handleNextModule = () => {
     if (selectedModule && modules.length > 0) {
-      const currentIndex = modules.findIndex(m => m.moduleId === selectedModule.moduleId);
-      const nextIndex = modules.findIndex(m => m.moduleId > selectedModule.moduleId && !m.isComplete);
+      const currentIndex = modules.findIndex((m) => m.moduleId === selectedModule.moduleId);
+      const nextIndex = modules.findIndex(
+        (m) => m.moduleId > selectedModule.moduleId && !m.isComplete
+      );
       if (nextIndex !== -1) {
         navigate(`/training/${modules[nextIndex].moduleId}`);
       } else {
@@ -226,51 +291,60 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   if (isLoading) return <SkeletonTotalOrderCard />;
 
-  console.log('Rendering - location:', location.pathname, 'modules:', modules, 'moduleId:', moduleId, 'selectedModule:', selectedModule, 'audioError:', audioError);
-
-  // Convert seconds to decimal minutes (rounded to 2 decimal places)
-
-  // Force watch time to look like Duration
-  const formatTime = (seconds: number): string => {
-    if (!seconds || isNaN(seconds)) return "0:00";
-
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-
-    // Only show hours if total time is >= 1 hour
-    if (hrs > 0) {
-      return `${hrs}:${mins.toString().padStart(2, "0")}:${secs
-        .toString()
-        .padStart(2, "0")}`;
-    }
-
-    //  Otherwise just MM:SS like your Duration field
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
+  console.log(
+    'Rendering - location:',
+    location.pathname,
+    'modules:',
+    modules,
+    'moduleId:',
+    moduleId,
+    'selectedModule:',
+    selectedModule,
+    'audioError:',
+    audioError
+  );
 
   return (
     <MainCard
       border={false}
       content={false}
       sx={{
-        minHeight: '300px', // Minimum height for better visibility
-        height: 'auto', // Allow dynamic height based on content
-        maxWidth: '100%', // Ensure it doesn't exceed parent width
-        overflow: 'visible', // Allow content to expand
-        [theme.breakpoints.down('sm')]: { // Mobile adjustments
-          minHeight: '200px', // Smaller minimum height for mobile
-          padding: 1, // Reduce padding on mobile
+        minHeight: '300px',
+        height: 'auto',
+        maxWidth: '100%',
+        overflow: 'visible',
+        [theme.breakpoints.down('sm')]: {
+          minHeight: '200px',
+          padding: 1,
         },
       }}
     >
-      <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', backgroundColor: theme.palette.grey[100] }}>
+      <Box
+        sx={{
+          p: 3,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: theme.palette.grey[100],
+        }}
+      >
         {audioError ? (
           <Box sx={{ textAlign: 'center' }}>
-            <Typography color="error" align="center">{audioError}</Typography>
+            <Typography color="error" align="center">
+              {audioError}
+            </Typography>
             <Button variant="contained" onClick={handleTryAgain} sx={{ mt: 2 }}>
               Get back to Course Outline
+            </Button>
+            {/* Temporary button to clear local storage for debugging */}
+            <Button
+              variant="outlined"
+              onClick={() => localStorage.clear()}
+              sx={{ mt: 2 }}
+            >
+              Clear Local Storage (Debug)
             </Button>
           </Box>
         ) : (
@@ -279,17 +353,23 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
               <Grid container spacing={2}>
                 {modules.length > 0 ? (
                   modules.map((module) => (
-                    <Grid item xs={12} sm={6} md={3} key={`module-${module.moduleId || module.title}`}>
+                    <Grid
+                      item
+                      xs={12}
+                      sm={6}
+                      md={3}
+                      key={`module-${module.moduleId || module.title}`}
+                    >
                       {module.moduleId ? (
                         <MainCard
-                          title={`Lesson ${module.moduleId} - ${module.title || 'Untitled'}`} // Guard against undefined moduleId
+                          title={`Lesson ${module.moduleId} - ${module.title || 'Untitled'}`}
                           sx={{
                             cursor: 'pointer',
                             border: '1px solid',
                             borderColor: theme.palette.divider,
                             backgroundColor: '#fff',
                             transition: 'background 0.2s',
-                            '&:hover': { backgroundColor: theme.palette.action.hover }
+                            '&:hover': { backgroundColor: theme.palette.action.hover },
                           }}
                           onClick={() => handleModuleSelect(module.moduleId)}
                         >
@@ -315,17 +395,17 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                 <MainCard
                   title={`Lesson ${selectedModule.moduleId} - ${selectedModule.title}`}
                   sx={{
-                    width: '100%', // Full width for better mobile compatibility
-                    maxWidth: '600px', // Cap width on larger screens
+                    width: '100%',
+                    maxWidth: '600px',
                     [theme.breakpoints.down('sm')]: {
-                      maxWidth: '100%', // Full width on mobile
-                      padding: 1, // Reduce padding on mobile
+                      maxWidth: '100%',
+                      padding: 1,
                     },
                   }}
                 >
                   <ReactH5AudioPlayer
                     ref={audioRef}
-                    src={`https://brm-partners.britam.com${selectedModule.filePath}`} // Ensure this URL is correct
+                    src={`https://brm-partners.britam.com${selectedModule.filePath}`}
                     listenInterval={1000}
                     onPlay={() => {
                       console.log('Playing', audioRef.current?.audio);
@@ -339,20 +419,15 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                     }}
                     onEnded={() => {
                       if (selectedModule) {
-                        // No multiply by 60 – duration is already in seconds
                         const fullDuration = selectedModule.duration;
                         updateProgress(selectedModule.moduleId, fullDuration);
                       }
                     }}
-
                     onListen={(e) => {
-                      console.log("onListen event:", e);
+                      console.log('onListen event:', e);
                       if (e.target) {
                         let time = e.target.currentTime || 0;
-
-                        //  Keep within audio duration or backend duration
                         time = Math.min(time, audioDuration || selectedModule.duration);
-
                         setCurrentTime(Math.floor(isNaN(time) ? 0 : time));
                       }
                     }}
@@ -362,32 +437,46 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                     }}
                     customAdditionalControls={[]}
                     customVolumeControls={[]}
-                    customControlsSection={['MAIN_CONTROLS', (
-                      <div style={{ display: 'flex', gap: '10px', padding: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                        {/* <IconButton onClick={() => audioRef.current?.audio?.play()} color="primary"><FaPlay /></IconButton>
-                        <IconButton onClick={() => audioRef.current?.audio?.pause()} color="primary"><FaPause /></IconButton> */}
-                        <IconButton onClick={handleRewind} color="primary"><FaUndo /></IconButton>
-                        <IconButton onClick={handleRestart} color="primary"><FaUndo style={{ transform: 'rotate(180deg)' }} /></IconButton>
-                        <Button variant="contained" onClick={handleClose} sx={{ mt: 1 }}>Close</Button>
-                      </div>
-                    )]}
+                    customControlsSection={[
+                      'MAIN_CONTROLS',
+                      (
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: '10px',
+                            padding: '10px',
+                            flexWrap: 'wrap',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <IconButton onClick={handleRewind} color="primary">
+                            <FaUndo />
+                          </IconButton>
+                          <IconButton onClick={handleRestart} color="primary">
+                            <FaUndo style={{ transform: 'rotate(180deg)' }} />
+                          </IconButton>
+                          <Button variant="contained" onClick={handleClose} sx={{ mt: 1 }}>
+                            Close
+                          </Button>
+                        </div>
+                      ),
+                    ]}
                     showJumpControls={false}
                     showSkipControls={false}
-                    style={{ width: '100%' }} // Ensure player takes full width
+                    style={{ width: '100%' }}
                   />
                   <Box sx={{ p: 2, textAlign: 'center' }}>
                     <Typography>Duration: {formatTime(selectedModule.duration)}</Typography>
                     <Typography>
                       Progress: {formatTime(currentTime)} / {formatTime(selectedModule.duration)}
                     </Typography>
-
                     <Typography>Status: {selectedModule.status}</Typography>
                     {selectedModule.isComplete && (
                       <Button
                         variant="contained"
                         startIcon={<FaArrowRight />}
                         onClick={handleNextModule}
-                        disabled={modules.every(m => m.isComplete)}
+                        disabled={modules.every((m) => m.isComplete)}
                         sx={{ mt: 2 }}
                       >
                         Next Module
@@ -405,7 +494,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 };
 
 TrainingAudioCard.propTypes = {
-  isLoading: PropTypes.bool
+  isLoading: PropTypes.bool,
 };
 
 export default TrainingAudioCard;
