@@ -237,7 +237,7 @@ const Analytics = () => {
                 ? // Show all modules
                 [1, 2, 3, 4].map((moduleId) => (
                     <Grid item xs={12} md={6} key={moduleId}>
-                        <MainCard title={`Module ${moduleId}`}>
+                        <MainCard title={`Section ${moduleId}`}>
                             <Typography>Total Questions: {scores[moduleId - 1]?.totalQuestions || 0}</Typography>
                             <Typography>Answered: {scores[moduleId - 1]?.answered || 0}</Typography>
                             <Typography>Correct Answers: {scores[moduleId - 1]?.correctAnswers || 0}</Typography>
@@ -255,7 +255,7 @@ const Analytics = () => {
                 : // Show only selected module expanded
                 <Grid item xs={12}>
                     <Collapse in={true} timeout={500}>
-                        <MainCard title={`Module ${selectedModule}`}>
+                        <MainCard title={`Section ${selectedModule}`}>
                             <Typography>
                                 Total Questions: {scores[selectedModule - 1]?.totalQuestions || 0}
                             </Typography>
