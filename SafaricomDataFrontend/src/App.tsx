@@ -11,6 +11,7 @@ import Snackbar from 'ui-component/extended/Snackbar';
 import Notistack from 'ui-component/third-party/Notistack';
 
 import ThemeCustomization from 'themes';
+import ErrorBoundary from './ErrorBoundary';
 
 // auth provider
 import { JWTProvider as AuthProvider } from 'contexts/JWTContext';
@@ -22,22 +23,24 @@ import { JWTProvider as AuthProvider } from 'contexts/JWTContext';
 
 const App = () => {
     return (
-        <ThemeCustomization>
-            <RTLLayout>
-                <Locales>
-                    <NavigationScroll>
-                        <AuthProvider>
-                            <>
-                                <Notistack>
-                                    <RouterProvider router={router} />
-                                    <Snackbar />
-                                </Notistack>
-                            </>
-                        </AuthProvider>
-                    </NavigationScroll>
-                </Locales>
-            </RTLLayout>
-        </ThemeCustomization>
+        <ErrorBoundary>
+            <ThemeCustomization>
+                <RTLLayout>
+                    <Locales>
+                        <NavigationScroll>
+                            <AuthProvider>
+                                <>
+                                    <Notistack>
+                                        <RouterProvider router={router} />
+                                        <Snackbar />
+                                    </Notistack>
+                                </>
+                            </AuthProvider>
+                        </NavigationScroll>
+                    </Locales>
+                </RTLLayout>
+            </ThemeCustomization>
+        </ErrorBoundary>
     );
 };
 

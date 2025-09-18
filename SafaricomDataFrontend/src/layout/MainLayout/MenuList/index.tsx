@@ -7,7 +7,8 @@ import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import NavItem from './NavItem';
 import NavGroup from './NavGroup';
-import menuItem from 'menu-items';
+import { DashboardMenu } from 'menu-items';
+import useAuth from 'hooks/useAuth';
 import useConfig from 'hooks/useConfig';
 import { MenuOrientation } from 'config';
 import { HORIZONTAL_MAX_ITEM } from 'config';
@@ -35,11 +36,14 @@ const MenuList = () => {
         url?: string;
     };
 
+
+    // Get current role from JWTContext
+    const { role } = useAuth();
     const [menuItems, setMenuItems] = useState<{ items: MenuItemType[] }>({ items: [] });
 
     useLayoutEffect(() => {
-        setMenuItems({ items: [...menuItem.items] });
-    }, [menuLoading]);
+        setMenuItems({ items: [DashboardMenu(role)] });
+    }, [menuLoading, role]);
 
     // Persist selectedID to localStorage whenever it changes
     useLayoutEffect(() => {

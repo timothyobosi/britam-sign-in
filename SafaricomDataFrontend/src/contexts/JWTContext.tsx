@@ -63,14 +63,17 @@ const setSession = (serviceToken: string | null) => {
 };
 
 // ==============================|| JWT CONTEXT & PROVIDER ||============================== //
-const JWTContext = createContext<StateType & {
+interface JWTContextType extends StateType {
+    role?: string;
     login: (email: string, password: string) => Promise<void>;
     logout: () => void;
     register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
     resetPassword: (email: string) => Promise<void>;
     completeResetPassword: (token: string, newPassword: string, email: string) => Promise<void>;
     updateProfile: () => void;
-} | null>(null);
+}
+
+const JWTContext = createContext<JWTContextType | null>(null);
 
 export const JWTProvider = ({ children }) => {
     const [state, dispatch] = useReducer(accountReducer, initialState);
@@ -227,6 +230,7 @@ export const JWTProvider = ({ children }) => {
         <JWTContext.Provider
             value={{
                 ...state,
+                role: state.user?.role,
                 login,
                 logout,
                 register,

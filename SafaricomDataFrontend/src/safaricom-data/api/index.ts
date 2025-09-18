@@ -1,3 +1,69 @@
+// -------------------- QUIZ ADMIN API FUNCTIONS --------------------
+const QUIZ_ADMIN_BASE_URL = `${import.meta.env.VITE_API_TARGET}/api/QuizAdmin`;
+
+export async function getAdminQuestions(token: string): Promise<any[]> {
+    const res = await fetch(`${QUIZ_ADMIN_BASE_URL}/questions`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': '*/*',
+            'Content-Type': 'application/json',
+        },
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+}
+
+export async function createAdminQuestion(token: string, body: {
+    text: string;
+    moduleId: number;
+    options: { text: string }[];
+    correctOptionText: string;
+}): Promise<any> {
+    const res = await fetch(`${QUIZ_ADMIN_BASE_URL}/questions`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': '*/*',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+}
+
+export async function updateAdminQuestion(token: string, questionId: number, body: {
+    text: string;
+    moduleId: number;
+    options: { text: string }[];
+    correctOptionText: string;
+}): Promise<any> {
+    const res = await fetch(`${QUIZ_ADMIN_BASE_URL}/questions/${questionId}`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': '*/*',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+}
+
+export async function deleteAdminQuestion(token: string, questionId: number): Promise<any> {
+    const res = await fetch(`${QUIZ_ADMIN_BASE_URL}/questions/${questionId}`, {
+        method: 'DELETE',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': '*/*',
+            'Content-Type': 'application/json',
+        },
+    });
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return res.json();
+}
 // -------------------- CERTIFICATE API FUNCTIONS --------------------
 export async function getFinalScore(token: string): Promise<any> {
     const res = await fetch(`${QUIZ_BASE_URL}/final-score`, {
