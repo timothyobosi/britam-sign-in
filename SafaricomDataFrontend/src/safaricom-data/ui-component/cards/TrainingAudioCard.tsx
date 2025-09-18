@@ -18,23 +18,27 @@ interface TrainingAudioCardProps {
 const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLoading = false }) => {
   // Helper: get cached modules from localStorage
   const getCachedModules = () => {
-    try {
-      const cached = localStorage.getItem('trainingModules_cache');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) {
-          return parsed.map((m) => ({
-            ...m,
-            duration: normalizeToSeconds(m.duration),
-            watchTime: Math.min(normalizeToSeconds(m.watchTime), normalizeToSeconds(m.duration)),
-          }));
-        }
+  try {
+    const cached = localStorage.getItem('trainingModules_cache');
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp > 24 * 60 * 60 * 1000) {
+        localStorage.removeItem('trainingModules_cache');
+        return [];
       }
-    } catch (e) {
-      console.warn('Failed to parse cached modules:', e);
+      if (Array.isArray(data)) {
+        return data.map((m) => ({
+          ...m,
+          duration: normalizeToSeconds(m.duration),
+          watchTime: Math.min(normalizeToSeconds(m.watchTime), normalizeToSeconds(m.duration)),
+        }));
+      }
     }
-    return [];
-  };
+  } catch (e) {
+    console.warn('Failed to parse cached modules:', e);
+  }
+  return [];
+};
 
   const theme = useTheme();
   const jwtContext = React.useContext(JWTContext);
@@ -91,44 +95,33 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   };
 
   // Fetch all modules
-  useEffect(() => {
-    if (!jwtContext || !jwtContext.isInitialized || !jwtContext.user) return;
-    const agentId = Number(jwtContext.user.agentId);
-    const token = localStorage.getItem('serviceToken');
-    if (!token) {
-      const cached = getCachedModules();
-      if (cached.length > 0) {
-        setModules(cached);
-        setAudioError('Loaded cached modules due to missing token.');
-      } else {
-        setAudioError('No valid token found.');
-      }
-      setIsLoading(false);
-      return;
+ useEffect(() => {
+  if (!jwtContext || !jwtContext.isInitialized || !jwtContext.user) return;
+  const agentId = Number(jwtContext.user.agentId);
+  const token = localStorage.getItem('serviceToken');
+  if (!token) {
+    const cached = getCachedModules();
+    if (cached.length > 0) {
+      setModules(cached);
+      setAudioError('Loaded cached modules due to missing token.');
+    } else {
+      setAudioError('No valid token found.');
     }
-    setIsLoading(true);
+    setIsLoading(false);
+    return;
+  }
+  setIsLoading(true);
+  if (navigator.onLine) {
     authApi
       .getAllTrainingModules(token, agentId)
       .then((data: authApi.TrainingModule[]) => {
-        const normalized = data.map((m) => {
-          const duration = normalizeToSeconds(m.duration);
-          const watchTime = normalizeToSeconds(m.watchTime);
-          const cappedWatchTime = Math.min(watchTime, duration);
-          console.log(
-            `Module ${m.moduleId} - Title: ${m.title}, Raw duration: ${m.duration}, Normalized: ${duration}, Raw watchTime: ${m.watchTime}, Normalized: ${watchTime}, Capped: ${cappedWatchTime}`
-          );
-          return {
-            ...m,
-            duration,
-            watchTime: cappedWatchTime,
-          };
-        });
-        // Cache modules in localStorage
-        localStorage.setItem('trainingModules_cache', JSON.stringify(normalized));
-        const sortedModules = normalized.sort(
-          (a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)
-        );
-        setModules(sortedModules);
+        const normalized = data.map((m) => ({
+          ...m,
+          duration: normalizeToSeconds(m.duration),
+          watchTime: Math.min(normalizeToSeconds(m.watchTime), normalizeToSeconds(m.duration)),
+        }));
+        localStorage.setItem('trainingModules_cache', JSON.stringify({ data: normalized, timestamp: Date.now() }));
+        setModules(normalized.sort((a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)));
         setAudioError(null);
       })
       .catch((err) => {
@@ -142,7 +135,17 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         }
       })
       .finally(() => setIsLoading(false));
-  }, [jwtContext]);
+  } else {
+    const cached = getCachedModules();
+    if (cached.length > 0) {
+      setModules(cached);
+      setAudioError('Loaded cached modules due to offline mode.');
+    } else {
+      setAudioError('No cached data available offline.');
+    }
+    setIsLoading(false);
+  }
+}, [jwtContext]);
 
   // Fetch selected module details when moduleId changes
   useEffect(() => {

@@ -2,11 +2,12 @@
 import { FormattedMessage } from 'react-intl';
 
 // assets
-import { IconDashboard, IconDeviceAnalytics } from '@tabler/icons-react';
+import { IconDashboard, IconDeviceAnalytics,IconCertificate } from '@tabler/icons-react';
 
 const icons = {
     IconDashboard: IconDashboard,
-    IconDeviceAnalytics: IconDeviceAnalytics
+    IconDeviceAnalytics: IconDeviceAnalytics,
+    IconCertificates: IconCertificate
 };
 
 // ==============================|| MENU ITEMS - DASHBOARD ||============================== //
@@ -31,6 +32,14 @@ const dashboard = {
             type: 'item',
             url: '/dashboard/analytics',
             icon: icons.IconDeviceAnalytics,
+            breadcrumbs: false
+        },
+        {
+            id: 'certificate',
+            title: 'My Certificate',
+            type: 'item',
+            url: '/dashboard/certificate',
+            icon: icons.IconCertificates,
             breadcrumbs: false
         }
     ]

@@ -14,6 +14,7 @@ import { loader as productsLoader, productLoader } from 'api/products';
 // dashboard routing
 const DashboardDefault = Loadable(lazy(() => import('views/dashboard/Default')));
 const DashboardAnalytics = Loadable(lazy(() => import('views/dashboard/Analytics')));
+const DashboardCertificate = Loadable(lazy(() => import('views/dashboard/CertificateTab')));
 
 // ==============================|| MAIN ROUTING ||============================== //
 
@@ -33,6 +34,10 @@ const MainRoutes = {
         {
             path: '/dashboard/analytics',
             element: <DashboardAnalytics />
+        },
+        {
+            path: '/dashboard/certificate',
+            element: <DashboardCertificate />
         },
         // Training module routes
         {
