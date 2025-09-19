@@ -1,7 +1,7 @@
 import PropTypes from 'prop-types';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '@mui/material/styles';
-import { Box, Button, Grid, Typography, IconButton } from '@mui/material';
+import { Box, Button, Grid, Typography, IconButton, CircularProgress, Skeleton } from '@mui/material';
 import { FaUndo, FaArrowRight } from 'react-icons/fa';
 import { useNavigate, useLocation, useParams, useMatch } from 'react-router-dom';
 import MainCard from 'ui-component/cards/MainCard';
@@ -18,27 +18,27 @@ interface TrainingAudioCardProps {
 const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLoading = false }) => {
   // Helper: get cached modules from localStorage
   const getCachedModules = () => {
-  try {
-    const cached = localStorage.getItem('trainingModules_cache');
-    if (cached) {
-      const { data, timestamp } = JSON.parse(cached);
-      if (Date.now() - timestamp > 24 * 60 * 60 * 1000) {
-        localStorage.removeItem('trainingModules_cache');
-        return [];
+    try {
+      const cached = localStorage.getItem('trainingModules_cache');
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp > 24 * 60 * 60 * 1000) {
+          localStorage.removeItem('trainingModules_cache');
+          return [];
+        }
+        if (Array.isArray(data)) {
+          return data.map((m) => ({
+            ...m,
+            duration: normalizeToSeconds(m.duration),
+            watchTime: Math.min(normalizeToSeconds(m.watchTime), normalizeToSeconds(m.duration)),
+          }));
+        }
       }
-      if (Array.isArray(data)) {
-        return data.map((m) => ({
-          ...m,
-          duration: normalizeToSeconds(m.duration),
-          watchTime: Math.min(normalizeToSeconds(m.watchTime), normalizeToSeconds(m.duration)),
-        }));
-      }
+    } catch (e) {
+      console.warn('Failed to parse cached modules:', e);
     }
-  } catch (e) {
-    console.warn('Failed to parse cached modules:', e);
-  }
-  return [];
-};
+    return [];
+  };
 
   const theme = useTheme();
   const jwtContext = React.useContext(JWTContext);
@@ -95,57 +95,57 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   };
 
   // Fetch all modules
- useEffect(() => {
-  if (!jwtContext || !jwtContext.isInitialized || !jwtContext.user) return;
-  const agentId = Number(jwtContext.user.agentId);
-  const token = localStorage.getItem('serviceToken');
-  if (!token) {
-    const cached = getCachedModules();
-    if (cached.length > 0) {
-      setModules(cached);
-      setAudioError('Loaded cached modules due to missing token.');
-    } else {
-      setAudioError('No valid token found.');
+  useEffect(() => {
+    if (!jwtContext || !jwtContext.isInitialized || !jwtContext.user) return;
+    const agentId = Number(jwtContext.user.agentId);
+    const token = localStorage.getItem('serviceToken');
+    if (!token) {
+      const cached = getCachedModules();
+      if (cached.length > 0) {
+        setModules(cached);
+        setAudioError('Loaded cached modules due to missing token.');
+      } else {
+        setAudioError('No valid token found.');
+      }
+      setIsLoading(false);
+      return;
     }
-    setIsLoading(false);
-    return;
-  }
-  setIsLoading(true);
-  if (navigator.onLine) {
-    authApi
-      .getAllTrainingModules(token, agentId)
-      .then((data: authApi.TrainingModule[]) => {
-        const normalized = data.map((m) => ({
-          ...m,
-          duration: normalizeToSeconds(m.duration),
-          watchTime: Math.min(normalizeToSeconds(m.watchTime), normalizeToSeconds(m.duration)),
-        }));
-        localStorage.setItem('trainingModules_cache', JSON.stringify({ data: normalized, timestamp: Date.now() }));
-        setModules(normalized.sort((a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)));
-        setAudioError(null);
-      })
-      .catch((err) => {
-        console.error('Failed to fetch modules:', err);
-        const cached = getCachedModules();
-        if (cached.length > 0) {
-          setModules(cached);
-          setAudioError('Loaded cached modules due to network issue.');
-        } else {
-          setAudioError(`Failed to load modules: ${err.message}`);
-        }
-      })
-      .finally(() => setIsLoading(false));
-  } else {
-    const cached = getCachedModules();
-    if (cached.length > 0) {
-      setModules(cached);
-      setAudioError('Loaded cached modules due to offline mode.');
+    setIsLoading(true);
+    if (navigator.onLine) {
+      authApi
+        .getAllTrainingModules(token, agentId)
+        .then((data: authApi.TrainingModule[]) => {
+          const normalized = data.map((m) => ({
+            ...m,
+            duration: normalizeToSeconds(m.duration),
+            watchTime: Math.min(normalizeToSeconds(m.watchTime), normalizeToSeconds(m.duration)),
+          }));
+          localStorage.setItem('trainingModules_cache', JSON.stringify({ data: normalized, timestamp: Date.now() }));
+          setModules(normalized.sort((a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)));
+          setAudioError(null);
+        })
+        .catch((err) => {
+          console.error('Failed to fetch modules:', err);
+          const cached = getCachedModules();
+          if (cached.length > 0) {
+            setModules(cached);
+            setAudioError('Loaded cached modules due to network issue.');
+          } else {
+            setAudioError(`Failed to load modules: ${err.message}`);
+          }
+        })
+        .finally(() => setIsLoading(false));
     } else {
-      setAudioError('No cached data available offline.');
+      const cached = getCachedModules();
+      if (cached.length > 0) {
+        setModules(cached);
+        setAudioError('Loaded cached modules due to offline mode.');
+      } else {
+        setAudioError('No cached data available offline.');
+      }
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  }
-}, [jwtContext]);
+  }, [jwtContext]);
 
   // Fetch selected module details when moduleId changes
   useEffect(() => {
@@ -440,7 +440,38 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                     </Grid>
                   ))
                 ) : (
-                  <Typography align="center">No modules available</Typography>
+                  <>
+                    <Box sx={{ width: '100%', mb: 2, textAlign: 'center' }}>
+                      <CircularProgress color="primary" size={40} />
+                      <Typography variant="h6" sx={{ mt: 1, color: theme.palette.text.secondary }}>
+                        Preparing audio training lessons...
+                      </Typography>
+                    </Box>
+                    <Grid container spacing={2}>
+                      {Array.from({ length: 6 }).map((_, index) => (
+                        <Grid item xs={12} sm={6} md={3} key={`skeleton-${index}`}>
+                          <Box
+                            sx={{
+                              p: 2,
+                              border: '1px solid',
+                              borderColor: theme.palette.divider,
+                              borderRadius: theme.shape.borderRadius,
+                              backgroundColor: theme.palette.background.paper,
+                              height: 150,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <Skeleton variant="text" sx={{ fontSize: '1.2rem', mb: 1 }} />
+                            <Skeleton variant="text" width="80%" />
+                            <Skeleton variant="text" width="60%" />
+                            <Skeleton variant="rounded" width="40%" height={20} />
+                          </Box>
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </>
                 )}
               </Grid>
             ) : (

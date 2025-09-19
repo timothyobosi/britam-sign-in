@@ -14,6 +14,7 @@ import JWTContext from 'contexts/JWTContext';
 import * as authApi from 'safaricom-data/api/index';
 import Box from '@mui/material/Box';
 import Collapse from '@mui/material/Collapse';
+import Skeleton from '@mui/material/Skeleton';
 
 const Analytics = () => {
     const theme = useTheme();
@@ -242,7 +243,39 @@ const Analytics = () => {
             </Button>
         </Box>
     );
-    if (isLoading) return <CircularProgress />;
+    if (isLoading) return (
+        <Box sx={{ p: 3, textAlign: 'center', width: '100%' }}>
+            <CircularProgress color="primary" size={60} />
+            <Typography variant="h6" sx={{ mt: 2, color: theme.palette.text.secondary }}>
+                Loading your Test
+            </Typography>
+            <Grid container spacing={3} sx={{ mt: 4 }}>
+                {Array.from({ length: 4 }).map((_, index) => (
+                    <Grid item xs={12} md={6} key={`skeleton-${index}`}>
+                        <Box
+                            sx={{
+                                p: 2,
+                                border: '1px solid',
+                                borderColor: theme.palette.divider,
+                                borderRadius: theme.shape.borderRadius,
+                                backgroundColor: theme.palette.background.paper,
+                                height: 200,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between',
+                            }}
+                        >
+                            <Skeleton variant="text" sx={{ fontSize: '1.5rem' }} />
+                            <Skeleton variant="text" />
+                            <Skeleton variant="text" />
+                            <Skeleton variant="text" />
+                            <Skeleton variant="rectangular" width="30%" height={36} sx={{ mt: 1 }} />
+                        </Box>
+                    </Grid>
+                ))}
+            </Grid>
+        </Box>
+    );
 
     return (
         <Grid container spacing={3}>
