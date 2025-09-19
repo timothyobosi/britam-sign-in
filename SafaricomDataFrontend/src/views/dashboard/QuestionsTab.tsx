@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Typography, CircularProgress, Box, TextField, IconButton, Paper } from '@mui/material';
+import { useDispatch } from 'store';
+import { openSnackbar } from 'store/slices/snackbar';
 import { getAdminQuestions, createAdminQuestion, updateAdminQuestion, deleteAdminQuestion } from 'safaricom-data/api/index';
 import JWTContext from 'contexts/JWTContext';
 import { FaTrash, FaEdit, FaPlus } from 'react-icons/fa';
@@ -17,6 +19,7 @@ const QuestionsTab: React.FC = () => {
     options: [{ text: '' }],
     correctOptionText: ''
   });
+  const dispatch = useDispatch();
 
   const fetchQuestions = async () => {
     if (!token) return;
@@ -38,7 +41,7 @@ const QuestionsTab: React.FC = () => {
 
   const handleChange = (field: string, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
-  };
+  } 
 
   const handleOptionChange = (idx: number, value: string) => {
     setForm((prev) => ({
@@ -62,6 +65,13 @@ const QuestionsTab: React.FC = () => {
     try {
       if (editId) {
         await updateAdminQuestion(token, editId, form);
+        dispatch(openSnackbar({
+          open: true,
+          message: 'Question updated successfully',
+          variant: 'alert',
+          alert: { color: 'success' },
+          close: false
+        }));
       } else {
         await createAdminQuestion(token, form);
       }
@@ -106,7 +116,7 @@ const QuestionsTab: React.FC = () => {
       {error && <Typography color="error">{error}</Typography>}
       <Paper sx={{ p: 2, mb: 3 }}>
         <TextField label="Question Text" fullWidth sx={{ mb: 2 }} value={form.text} onChange={e => handleChange('text', e.target.value)} />
-        <TextField label="Module ID" type="number" sx={{ mb: 2 }} value={form.moduleId} onChange={e => handleChange('moduleId', Number(e.target.value))} />
+        <TextField label="Section" type="number" sx={{ mb: 2 }} value={form.moduleId} onChange={e => handleChange('moduleId', Number(e.target.value))} helperText={form.moduleId ? `Section ${form.moduleId}` : ''} />
         <Typography sx={{ mb: 1 }}>Options:</Typography>
         {form.options.map((opt, idx) => (
           <Box key={idx} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
@@ -116,13 +126,13 @@ const QuestionsTab: React.FC = () => {
         ))}
         <Button startIcon={<FaPlus />} onClick={handleAddOption} sx={{ mb: 2 }}>Add Option</Button>
         <TextField label="Correct Option Text" fullWidth sx={{ mb: 2 }} value={form.correctOptionText} onChange={e => handleChange('correctOptionText', e.target.value)} />
-        <Button variant="contained" onClick={handleSubmit}>{editId ? 'Update' : 'Create'} Question</Button>
-        {editId && <Button sx={{ ml: 2 }} onClick={() => { setEditId(null); setForm({ text: '', moduleId: 1, options: [{ text: '' }], correctOptionText: '' }); }}>Cancel Edit</Button>}
+        <Button variant="contained" onClick={handleSubmit}>{editId ? 'Update Question' : 'Create Question'}</Button>
+        {editId && <Button sx={{ ml: 2 }} onClick={() => { setEditId(null); setForm({ text: '', moduleId: 1, options: [{ text: '' }], correctOptionText: '' }); }}>Cancel</Button>}
       </Paper>
       <Typography variant="h6" sx={{ mb: 2 }}>All Questions</Typography>
       {questions.map((q) => (
         <Paper key={q.questionId} sx={{ p: 2, mb: 2 }}>
-          <Typography><b>Module:</b> {q.moduleId}</Typography>
+          <Typography><b>Section:</b> {q.moduleId ? `Section ${q.moduleId}` : ''}</Typography>
           <Typography><b>Text:</b> {q.text}</Typography>
           <Typography><b>Options:</b> {q.options.map((opt: any) => opt.text).join(', ')}</Typography>
           <Typography><b>Correct:</b> {q.correctOptionText}</Typography>
