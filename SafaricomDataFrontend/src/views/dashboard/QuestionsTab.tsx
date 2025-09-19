@@ -15,7 +15,7 @@ const QuestionsTab: React.FC = () => {
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({
     text: '',
-    moduleId: 1,
+    moduleName: '',
     options: [{ text: '' }],
     correctOptionText: ''
   });
@@ -36,12 +36,11 @@ const QuestionsTab: React.FC = () => {
 
   useEffect(() => {
     fetchQuestions();
-    // eslint-disable-next-line
-  }, []);
+  }, [token]);
 
   const handleChange = (field: string, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
-  } 
+  };
 
   const handleOptionChange = (idx: number, value: string) => {
     setForm((prev) => ({
@@ -74,24 +73,38 @@ const QuestionsTab: React.FC = () => {
         }));
       } else {
         await createAdminQuestion(token, form);
+        dispatch(openSnackbar({
+          open: true,
+          message: 'Question created successfully',
+          variant: 'alert',
+          alert: { color: 'success' },
+          close: false
+        }));
       }
       setForm({ text: '', moduleId: 1, options: [{ text: '' }], correctOptionText: '' });
       setEditId(null);
       fetchQuestions();
     } catch (err: any) {
       setError('Failed to save question: ' + err.message);
+      dispatch(openSnackbar({
+        open: true,
+        message: 'Failed to save question: ' + err.message,
+        variant: 'alert',
+        alert: { color: 'error' },
+        close: false
+      }));
     } finally {
       setLoading(false);
     }
   };
 
   const handleEdit = (q: any) => {
-    setEditId(q.questionId);
+    setEditId(q.questionid);
     setForm({
       text: q.text,
-      moduleId: q.moduleId,
+      moduleName: q.moduleName,
       options: q.options,
-      correctOptionText: q.correctOptionText
+      correctOptionText: q.options.find((opt: any) => opt.optionid === q.correctoptionid)?.text || ''
     });
   };
 
@@ -101,13 +114,35 @@ const QuestionsTab: React.FC = () => {
     setError(null);
     try {
       await deleteAdminQuestion(token, id);
+      dispatch(openSnackbar({
+        open: true,
+        message: 'Question deleted successfully',
+        variant: 'alert',
+        alert: { color: 'success' },
+        close: false
+      }));
       fetchQuestions();
     } catch (err: any) {
       setError('Failed to delete question: ' + err.message);
+      dispatch(openSnackbar({
+        open: true,
+        message: 'Failed to delete question: ' + err.message,
+        variant: 'alert',
+        alert: { color: 'error' },
+        close: false
+      }));
     } finally {
       setLoading(false);
     }
   };
+
+  // Group questions by moduleName
+  const groupedQuestions: { [key: string]: any[] } = {};
+  questions.forEach((q) => {
+    const key = q.moduleName || 'Uncategorized';
+    if (!groupedQuestions[key]) groupedQuestions[key] = [];
+    groupedQuestions[key].push(q);
+  });
 
   return (
     <Box>
@@ -115,32 +150,74 @@ const QuestionsTab: React.FC = () => {
       {loading && <CircularProgress />}
       {error && <Typography color="error">{error}</Typography>}
       <Paper sx={{ p: 2, mb: 3 }}>
-        <TextField label="Question Text" fullWidth sx={{ mb: 2 }} value={form.text} onChange={e => handleChange('text', e.target.value)} />
-        <TextField label="Section" type="number" sx={{ mb: 2 }} value={form.moduleId} onChange={e => handleChange('moduleId', Number(e.target.value))} helperText={form.moduleId ? `Section ${form.moduleId}` : ''} />
+        <TextField
+          label="Question Text"
+          fullWidth
+          sx={{ mb: 2 }}
+          value={form.text}
+          onChange={(e) => handleChange('text', e.target.value)}
+          InputLabelProps={{ shrink: true }}
+        />
+        <TextField
+          label="Module Name"
+          fullWidth
+          sx={{ mb: 2 }}
+          value={form.moduleName}
+          onChange={(e) => handleChange('moduleName', e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          helperText={form.moduleName ? form.moduleName : ''}
+        />
         <Typography sx={{ mb: 1 }}>Options:</Typography>
         {form.options.map((opt, idx) => (
           <Box key={idx} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <TextField label={`Option ${idx + 1}`} value={opt.text} onChange={e => handleOptionChange(idx, e.target.value)} sx={{ flex: 1 }} />
-            <IconButton onClick={() => handleRemoveOption(idx)} disabled={form.options.length <= 1}><FaTrash /></IconButton>
+            <TextField
+              label={`Option ${idx + 1}`}
+              value={opt.text}
+              onChange={(e) => handleOptionChange(idx, e.target.value)}
+              sx={{ flex: 1 }}
+              InputLabelProps={{ shrink: true }}
+            />
+            <IconButton onClick={() => handleRemoveOption(idx)} disabled={form.options.length <= 1}>
+              <FaTrash />
+            </IconButton>
           </Box>
         ))}
-        <Button startIcon={<FaPlus />} onClick={handleAddOption} sx={{ mb: 2 }}>Add Option</Button>
-        <TextField label="Correct Option Text" fullWidth sx={{ mb: 2 }} value={form.correctOptionText} onChange={e => handleChange('correctOptionText', e.target.value)} />
-        <Button variant="contained" onClick={handleSubmit}>{editId ? 'Update Question' : 'Create Question'}</Button>
-        {editId && <Button sx={{ ml: 2 }} onClick={() => { setEditId(null); setForm({ text: '', moduleId: 1, options: [{ text: '' }], correctOptionText: '' }); }}>Cancel</Button>}
+        <Button startIcon={<FaPlus />} onClick={handleAddOption} sx={{ mb: 2 }}>
+          Add Option
+        </Button>
+        <TextField
+          label="Correct Option Text"
+          fullWidth
+          sx={{ mb: 2 }}
+          value={form.correctOptionText}
+          onChange={(e) => handleChange('correctOptionText', e.target.value)}
+          InputLabelProps={{ shrink: true }}
+        />
+        <Button variant="contained" onClick={handleSubmit}>
+          {editId ? 'Update Question' : 'Create Question'}
+        </Button>
+        {editId && (
+          <Button sx={{ ml: 2 }} onClick={() => { setEditId(null); setForm({ text: '', moduleId: 1, options: [{ text: '' }], correctOptionText: '' }); }}>
+            Cancel
+          </Button>
+        )}
       </Paper>
       <Typography variant="h6" sx={{ mb: 2 }}>All Questions</Typography>
-      {questions.map((q) => (
-        <Paper key={q.questionId} sx={{ p: 2, mb: 2 }}>
-          <Typography><b>Section:</b> {q.moduleId ? `Section ${q.moduleId}` : ''}</Typography>
-          <Typography><b>Text:</b> {q.text}</Typography>
-          <Typography><b>Options:</b> {q.options.map((opt: any) => opt.text).join(', ')}</Typography>
-          <Typography><b>Correct:</b> {q.correctOptionText}</Typography>
-          <Box sx={{ mt: 1 }}>
-            <IconButton onClick={() => handleEdit(q)}><FaEdit /></IconButton>
-            <IconButton onClick={() => handleDelete(q.questionId)}><FaTrash /></IconButton>
-          </Box>
-        </Paper>
+      {Object.keys(groupedQuestions).map((moduleName) => (
+        <Box key={moduleName} sx={{ mb: 3 }}>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>{moduleName}</Typography>
+          {groupedQuestions[moduleName].map((q) => (
+            <Paper key={q.questionid} sx={{ p: 2, mb: 2 }}>
+              <Typography><b>Text:</b> {q.text}</Typography>
+              <Typography><b>Options:</b> {q.options?.map((opt: any) => opt.text).join(', ')}</Typography>
+              <Typography><b>Correct:</b> {q.options?.find((opt: any) => opt.optionid === q.correctoptionid)?.text || ''}</Typography>
+              <Box sx={{ mt: 1 }}>
+                <IconButton onClick={() => handleEdit(q)}><FaEdit /></IconButton>
+                <IconButton onClick={() => handleDelete(q.questionid)}><FaTrash /></IconButton>
+              </Box>
+            </Paper>
+          ))}
+        </Box>
       ))}
     </Box>
   );
