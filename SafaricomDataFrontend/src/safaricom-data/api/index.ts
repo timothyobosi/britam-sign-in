@@ -1,10 +1,14 @@
-// -------------------- CERTIFICATE API FUNCTIONS --------------------
+import { QuizQuestion, QuizScoreResponse, SubmitQuizAnswer, TrainingModule, LoginResponse } from './types';
+
+export const QUIZ_BASE_URL = `${import.meta.env.VITE_API_TARGET}/api/Quiz`;
+
 export async function getFinalScore(token: string): Promise<any> {
     const res = await fetch(`${QUIZ_BASE_URL}/final-score`, {
         method: 'GET',
         headers: {
             'Authorization': `Bearer ${token}`,
             'Accept': '*/*',
+            'Cache-Control': 'no-cache',
         },
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -17,21 +21,21 @@ export async function getCertificate(token: string): Promise<Blob> {
         headers: {
             'Authorization': `Bearer ${token}`,
             'Accept': '*/*',
+            'Cache-Control': 'no-cache',
         },
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    return res.blob(); // Assuming certificate is a PDF/image
+    return res.blob();
 }
-// -------------------- QUIZ API FUNCTIONS --------------------
-export const QUIZ_BASE_URL = `${import.meta.env.VITE_API_TARGET}/api/Quiz`;
 
 export async function getQuizQuestions(token: string, moduleId: number): Promise<QuizQuestion[]> {
-    const res = await fetch(`${QUIZ_BASE_URL}/questions/${moduleId}`, {
+    const res = await fetch(`${QUIZ_BASE_URL}/questions/${moduleId}?ts=${Date.now()}`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
             'Accept': '*/*',
+            'Cache-Control': 'no-cache',
         },
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -40,12 +44,13 @@ export async function getQuizQuestions(token: string, moduleId: number): Promise
 }
 
 export async function getQuizScore(token: string, agentId: number, moduleId: number): Promise<QuizScoreResponse> {
-    const res = await fetch(`${QUIZ_BASE_URL}/score/${agentId}/${moduleId}`, {
+    const res = await fetch(`${QUIZ_BASE_URL}/score/${agentId}/${moduleId}?ts=${Date.now()}`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
             'Accept': '*/*',
+            'Cache-Control': 'no-cache',
         },
     });
     if (!res.ok) {
@@ -54,11 +59,6 @@ export async function getQuizScore(token: string, agentId: number, moduleId: num
         throw new Error(`HTTP error! status: ${res.status} - ${errorText}`);
     }
     return res.json();
-}
-
-export interface SubmitQuizAnswer {
-    questionId: number;
-    selectedAnswer: number;
 }
 
 export async function submitQuizAnswers(
@@ -87,61 +87,56 @@ export async function submitQuizAnswers(
     }
     return { status: 'Success' };
 }
-// TypeScript: declare ImportMeta.env for Vite
-// Training API types and functions
-export interface TrainingModule {
-    moduleId: number;
-    title: string;
-    duration: number;
-    filePath: string;
-    watchTime: number;
-    isComplete: boolean;
-    status: string;
-    sequence?: number;
-    dateCreated?: string;
-    updateDate?: string;
-}
-
 
 const BASE_URL = `${import.meta.env.VITE_API_TARGET}${import.meta.env.VITE_API_BASE_URL}`;
 const TRAINING_BASEURL = `${import.meta.env.VITE_API_TARGET}${import.meta.env.VITE_TRAINING_BASE_URL}`;
 
 export async function getAllTrainingModules(token: string, agentId?: number): Promise<TrainingModule[]> {
-    const res = await fetch(`${TRAINING_BASEURL}/all-modules`, {
+    const res = await fetch(`${TRAINING_BASEURL}/all-modules?ts=${Date.now()}`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-cache',
         },
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     const data = await res.json();
-    console.log('Raw API data:', data); // Debug raw response
+    console.log('Raw API data:', data);
     return data.map((module: any) => {
-        // Find the latest progress for the current agent (agentId) if provided
-        const agentProgress = agentId ? module.trainingProgresses.find((progress: any) => progress.agentid === agentId) : module.trainingProgresses[0];
-        const progress = agentProgress || {}; // Fallback to empty object if no progress
+        // Prioritize completed progress or highest watchtime
+        const agentProgress = agentId
+            ? module.trainingProgresses?.reduce((latest: any, progress: any) => {
+                // Prefer completed progress; if tied, take highest watchtime
+                if (!latest) return progress;
+                if (progress.iscomplete && !latest.iscomplete) return progress;
+                if (!progress.iscomplete && latest.iscomplete) return latest;
+                return progress.watchtime > latest.watchtime ? progress : latest;
+              }, null)
+            : module.trainingProgresses[0];
+        const progress = agentProgress || {};
         return {
-            moduleId: module.moduleid, // Match the lowercase 'moduleid' from API
+            moduleId: module.moduleid,
             title: module.title,
             duration: module.duration,
-            filePath: module.filepath, // Match the lowercase 'filepath' from API
+            filePath: module.filepath,
             watchTime: progress.watchtime || 0,
-            isComplete: !!progress.iscomplete, // Convert 1/0 to boolean
+            isComplete: !!progress.iscomplete,
             status: progress.status || 'Not Started',
             sequence: module.sequence,
             dateCreated: module.datecreated,
-            updateDate: module.updatedate
+            updateDate: module.updatedate,
         };
     });
 }
 
 export async function getTrainingById(token: string, id: number): Promise<TrainingModule> {
-    const res = await fetch(`${TRAINING_BASEURL}/${id}`, {
+    const res = await fetch(`${TRAINING_BASEURL}/${id}?ts=${Date.now()}`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-cache',
         },
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -156,7 +151,7 @@ export async function getTrainingById(token: string, id: number): Promise<Traini
         status: data.status || 'Not Started',
         sequence: data.sequence,
         dateCreated: data.dateCreated,
-        updateDate: data.updateDate
+        updateDate: data.updateDate,
     };
 }
 
@@ -173,61 +168,6 @@ export async function updateTrainingProgress(token: string, moduleId: number, wa
     return res.json();
 }
 
-// const BASE_URL and TRAINING_BASEURL are already declared above. Remove duplicates.
-
-// -------------------- AUTH TYPES --------------------
-export interface LoginResponse {
-    status: string;
-    message: string;
-    token: string | null;
-    agentId: number;
-    name: string | null;
-    role?: string | null;
-}
-
-// -------------------- QUIZ TYPES --------------------
-export interface QuizScoreResponse {
-    totalQuestions: number;
-    answered: number;
-    correctAnswers: number;
-    scorePercent: number;
-}
-
-export interface QuizQuestion {
-    questionid: number;
-    text: string;
-    options: { optionid: number; text: string }[];
-}
-
-export interface QuizQuestionsResponse {
-    [key: number]: QuizQuestion[];
-}
-
-export interface SubmitAnswerResponse {
-    correct: boolean;
-    attemptNumber: number;
-    correctOptionId: number;
-}
-
-// -------------------- TRAINING TYPES --------------------
-export interface TrainingModule {
-    moduleId: number;
-    title: string;
-    duration: number;
-    filePath: string;
-    watchTime: number;
-    isComplete: boolean;
-    status: string;
-    sequence?: number;
-    dateCreated?: string;
-    updateDate?: string;
-}
-
-export interface TrainingModulesResponse {
-    [key: number]: TrainingModule[];
-}
-
-// -------------------- AUTH APIs --------------------
 export async function login(email: string, password: string): Promise<LoginResponse> {
     try {
         const res = await fetch(`${BASE_URL}/login`, {
@@ -282,7 +222,7 @@ export async function completeResetPassword(token: string, password: string, ema
         body: JSON.stringify({ token, newPassword: password, email }),
     });
     if (!res.ok) {
-        const text = await res.text(); // Log raw response for debugging
+        const text = await res.text();
         console.error('API Error:', res.status, text);
         return { success: false, message: `HTTP error! status: ${res.status}`, agentId: null };
     }

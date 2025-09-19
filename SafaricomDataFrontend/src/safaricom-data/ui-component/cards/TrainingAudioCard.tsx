@@ -43,7 +43,8 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       const cached = localStorage.getItem('trainingModules_cache');
       if (cached) {
         const { data, timestamp } = JSON.parse(cached);
-        if (Date.now() - timestamp > 24 * 60 * 60 * 1000) {
+        // Cache expires after 1 hour
+        if (Date.now() - timestamp > 60 * 60 * 1000) {
           localStorage.removeItem('trainingModules_cache');
           return [];
         }
@@ -157,7 +158,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       // Check cache first
       const cachedModules = getCachedModules();
       const cachedModule = cachedModules.find((m) => m.moduleId === id);
-      if (cachedModule) {
+      if (cachedModule && navigator.onLine) {
         console.log(`Loading cached module ${id}:`, cachedModule);
         setSelectedModule(cachedModule);
         const savedProgress = localStorage.getItem(`audioProgress_${id}`);
@@ -184,7 +185,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
             setSelectedModule(normalizedModule);
             // Update cache with new module data
             const updatedCache = [...cachedModules.filter((m) => m.moduleId !== id), normalizedModule];
-            localStorage.setItem('trainingModules_cache', JSON.stringify(updatedCache));
+            localStorage.setItem('trainingModules_cache', JSON.stringify({ data: updatedCache, timestamp: Date.now() }));
             const savedProgress = localStorage.getItem(`audioProgress_${id}`);
             setCurrentTime(savedProgress ? normalizeToSeconds(savedProgress) : cappedWatchTime || 0);
             setInitialPlaybackTime(0);
@@ -196,6 +197,11 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
             setAudioError(`Failed to load module ${id}: ${error.message}`);
           })
           .finally(() => setIsLoading(false));
+      }
+      // Load offline progress if available
+      if (!navigator.onLine) {
+        const savedProgress = localStorage.getItem(`audioProgress_${id}`);
+        setCurrentTime(savedProgress ? normalizeToSeconds(savedProgress) : cachedModule?.watchTime || 0);
       }
     } else {
       setSelectedModule(null);
@@ -215,6 +221,24 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     }
   }, [currentTime, moduleId, selectedModule]);
 
+  // Save progress before page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (audioRef.current?.audio && selectedModule) {
+        const time = Math.floor(audioRef.current.audio.currentTime);
+        localStorage.setItem(`audioProgress_${moduleId}`, String(time));
+        // Queue server update only if module is not completed
+        if (navigator.onLine && token && !selectedModule.isComplete) {
+          authApi.updateTrainingProgress(token, selectedModule.moduleId, time).catch((err) => {
+            console.error('Failed to save progress on unload:', err);
+          });
+        }
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [moduleId, selectedModule, token]);
+
   // Save module progress
   const updateProgress = async (moduleId: number, watchedSeconds: number) => {
     if (token && selectedModule) {
@@ -223,6 +247,12 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         const sessionTime = Math.max(0, validWatchedSeconds - initialPlaybackTime);
         const normalizedWatchTime = normalizeToSeconds(selectedModule.watchTime);
         const normalizedDuration = normalizeToSeconds(selectedModule.duration);
+
+        // Skip progress update if module is already completed
+        if (selectedModule.isComplete && normalizedWatchTime >= normalizedDuration * 0.95) {
+          console.log(`Skipping progress update for completed module ${moduleId}`);
+          return;
+        }
 
         // Cap watch time at duration
         let newWatchTime = normalizedWatchTime + sessionTime;
@@ -240,43 +270,46 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         const response = await authApi.updateTrainingProgress(token, moduleId, newWatchTime);
         console.log('Progress update response:', response);
 
-        if (moduleId) {
-          setIsLoading(true);
-          const updatedModuleRaw = await authApi.getTrainingById(token, moduleId);
-          const duration = normalizeToSeconds(updatedModuleRaw.duration);
-          const watchTime = normalizeToSeconds(updatedModuleRaw.watchTime);
-          const cappedWatchTime = Math.min(watchTime, duration);
-          const updatedModule = {
-            ...updatedModuleRaw,
-            duration,
-            watchTime: cappedWatchTime,
-          };
-          setSelectedModule(updatedModule);
+        // Fetch updated module and list
+        const updatedModuleRaw = await authApi.getTrainingById(token, moduleId);
+        const duration = normalizeToSeconds(updatedModuleRaw.duration);
+        const watchTime = normalizeToSeconds(updatedModuleRaw.watchTime);
+        const cappedWatchTime = Math.min(watchTime, duration);
+        const updatedModule = {
+          ...updatedModuleRaw,
+          duration,
+          watchTime: cappedWatchTime,
+        };
+        setSelectedModule(updatedModule);
 
-          const updatedModulesRaw = await authApi.getAllTrainingModules(token, agentId);
-          const updatedModules = updatedModulesRaw.map((m) => {
-            const modDuration = normalizeToSeconds(m.duration);
-            const modWatchTime = normalizeToSeconds(m.watchTime);
-            return {
-              ...m,
-              duration: modDuration,
-              watchTime: Math.min(modWatchTime, modDuration),
-            };
-          });
-          // Update cache
-          localStorage.setItem('trainingModules_cache', JSON.stringify(updatedModules));
-          setModules(
-            updatedModules.sort(
-              (a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)
-            )
-          );
-          setIsLoading(false);
-        }
+        const updatedModulesRaw = await authApi.getAllTrainingModules(token, agentId);
+        const updatedModules = updatedModulesRaw.map((m) => {
+          const modDuration = normalizeToSeconds(m.duration);
+          const modWatchTime = normalizeToSeconds(m.watchTime);
+          return {
+            ...m,
+            duration: modDuration,
+            watchTime: Math.min(modWatchTime, modDuration),
+          };
+        });
+        // Update cache
+        localStorage.setItem('trainingModules_cache', JSON.stringify({ data: updatedModules, timestamp: Date.now() }));
+        setModules(
+          updatedModules.sort(
+            (a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)
+          )
+        );
       } catch (error: any) {
         console.error('Progress update failed:', error);
-        setAudioError(
-          'Failed to save your progress. Please try closing the module again or contact support if the issue persists.'
+        // Revert optimistic update
+        setModules((prevModules) =>
+          prevModules.map((m) =>
+            m.moduleId === moduleId
+              ? { ...m, watchTime: selectedModule.watchTime, isComplete: selectedModule.isComplete, status: selectedModule.status }
+              : m
+          )
         );
+        throw error;
       }
     }
   };
@@ -299,20 +332,71 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     }
   };
 
-  const handleClose = () => {
-    if (audioRef.current?.audio && selectedModule) {
-      const watchedSeconds = Math.floor(audioRef.current.audio.currentTime || currentTime);
-      updateProgress(selectedModule.moduleId, watchedSeconds);
-    } else if (selectedModule) {
-      updateProgress(selectedModule.moduleId, currentTime);
+  const handleClose = async () => {
+    if (!selectedModule) {
+      navigate('/training');
+      return;
     }
-    setAudioError(null);
-    navigate('/training');
-    setSelectedModule(null);
+    try {
+      const watchedSeconds = audioRef.current?.audio
+        ? Math.floor(audioRef.current.audio.currentTime)
+        : currentTime;
+      const normalizedDuration = normalizeToSeconds(selectedModule.duration);
+      const newWatchTime = Math.min(watchedSeconds, normalizedDuration);
+      const isComplete = newWatchTime >= normalizedDuration * 0.95;
+
+      // Skip UI and API updates if module is already completed
+      if (selectedModule.isComplete && selectedModule.watchTime >= normalizedDuration * 0.95) {
+        console.log(`Skipping UI update for completed module ${selectedModule.moduleId}`);
+        setAudioError(null);
+        setSelectedModule(null);
+        navigate('/training');
+        return;
+      }
+
+      // Optimistic update to modules state
+      setModules((prevModules) =>
+        prevModules.map((m) =>
+          m.moduleId === selectedModule.moduleId
+            ? {
+                ...m,
+                watchTime: newWatchTime,
+                isComplete,
+                status: isComplete ? 'Completed' : m.status,
+              }
+            : m
+        )
+      );
+
+      // Update cache optimistically
+      const updatedModules = modules.map((m) =>
+        m.moduleId === selectedModule.moduleId
+          ? {
+              ...m,
+              watchTime: newWatchTime,
+              isComplete,
+              status: isComplete ? 'Completed' : m.status,
+            }
+          : m
+      );
+      localStorage.setItem(
+        'trainingModules_cache',
+        JSON.stringify({ data: updatedModules, timestamp: Date.now() })
+      );
+
+      // Save progress to server
+      await updateProgress(selectedModule.moduleId, watchedSeconds);
+
+      setAudioError(null);
+      setSelectedModule(null);
+      navigate('/training');
+    } catch (error) {
+      setAudioError('Failed to save progress. Please try again.');
+    }
   };
 
   const handleTryAgain = () => {
-    if (selectedModule) {
+    if (selectedModule && !selectedModule.isComplete) {
       updateProgress(selectedModule.moduleId, currentTime);
     }
     setAudioError(null);
@@ -328,7 +412,13 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   const handleRestart = () => {
     if (audioRef.current?.audio) {
+      // Optional: Confirm reset for completed modules
+      if (selectedModule?.isComplete && !window.confirm('Restart completed audio from the beginning?')) {
+        return;
+      }
       audioRef.current.audio.currentTime = 0;
+      localStorage.setItem(`audioProgress_${moduleId}`, '0');
+      setCurrentTime(0);
       audioRef.current.audio.play();
     }
   };
@@ -489,20 +579,28 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                 >
                   <ReactH5AudioPlayer
                     ref={audioRef}
-                    src={`https://brm-partners.britam.com${selectedModule.filePath}`}
+                    src={`https://brm-partners.britam.com${selectedModule.filePath}?v=${selectedModule.updateDate || Date.now()}`}
                     listenInterval={1000}
+                    onLoadedMetadata={() => {
+                      // Set initial playback position from saved progress
+                      if (audioRef.current?.audio && currentTime > 0) {
+                        audioRef.current.audio.currentTime = currentTime;
+                      }
+                    }}
                     onPlay={() => {
                       console.log('Playing', audioRef.current?.audio);
                       setInitialPlaybackTime(currentTime);
                     }}
                     onPause={() => {
                       console.log('Pausing - using currentTime:', currentTime);
-                      if (audioRef.current?.audio && selectedModule) {
-                        updateProgress(selectedModule.moduleId, Math.floor(audioRef.current.audio.currentTime));
+                      if (audioRef.current?.audio && selectedModule && !selectedModule.isComplete) {
+                        const time = Math.floor(audioRef.current.audio.currentTime);
+                        setCurrentTime(time);
+                        updateProgress(selectedModule.moduleId, time);
                       }
                     }}
                     onEnded={() => {
-                      if (selectedModule) {
+                      if (selectedModule && !selectedModule.isComplete) {
                         const fullDuration = selectedModule.duration;
                         updateProgress(selectedModule.moduleId, fullDuration);
                       }
@@ -512,7 +610,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                       if (e.target) {
                         let time = e.target.currentTime || 0;
                         time = Math.min(time, audioDuration || selectedModule.duration);
-                        setCurrentTime(Math.floor(isNaN(time) ? 0 : time));
+                        setCurrentTime(Math.floor(time));
                       }
                     }}
                     onError={(e) => {
