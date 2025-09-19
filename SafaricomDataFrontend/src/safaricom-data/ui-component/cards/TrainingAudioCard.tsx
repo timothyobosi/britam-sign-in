@@ -533,12 +533,12 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                             justifyContent: 'center',
                           }}
                         >
-                          <IconButton onClick={handleRewind} color="primary">
+                          {/* <IconButton onClick={handleRewind} color="primary">
                             <FaUndo />
                           </IconButton>
                           <IconButton onClick={handleRestart} color="primary">
                             <FaUndo style={{ transform: 'rotate(180deg)' }} />
-                          </IconButton>
+                          </IconButton> */}
                           <Button variant="contained" onClick={handleClose} sx={{ mt: 1 }}>
                             Close
                           </Button>
