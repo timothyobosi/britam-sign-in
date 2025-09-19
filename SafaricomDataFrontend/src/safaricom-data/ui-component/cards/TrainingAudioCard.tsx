@@ -15,6 +15,27 @@ interface TrainingAudioCardProps {
   isLoading?: boolean;
 }
 
+// Normalize time to seconds (handles MM:SS strings or numbers as seconds)
+const normalizeToSeconds = (value: any): number => {
+  if (!value) return 0;
+
+  if (typeof value === 'number' && !isNaN(value)) {
+    return Math.floor(value); // Assume number is in seconds
+  }
+
+  if (typeof value === 'string') {
+    // Expect MM:SS format
+    const parts = value.split(':').map(Number).filter(n => !isNaN(n));
+    if (parts.length === 2) {
+      const [m, s] = parts;
+      return m * 60 + s;
+    }
+    console.warn(`Invalid time format for value: ${value}`);
+  }
+
+  return 0; // Fallback for invalid input
+};
+
 const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLoading = false }) => {
   // Helper: get cached modules from localStorage
   const getCachedModules = () => {
@@ -62,27 +83,6 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   });
   const [initialPlaybackTime, setInitialPlaybackTime] = useState<number>(0);
   const [audioDuration, setAudioDuration] = useState<number>(0);
-
-  // Normalize time to seconds (handles MM:SS strings or numbers as seconds)
-  const normalizeToSeconds = (value: any): number => {
-    if (!value) return 0;
-
-    if (typeof value === 'number' && !isNaN(value)) {
-      return Math.floor(value); // Assume number is in seconds
-    }
-
-    if (typeof value === 'string') {
-      // Expect MM:SS format
-      const parts = value.split(':').map(Number).filter(n => !isNaN(n));
-      if (parts.length === 2) {
-        const [m, s] = parts;
-        return m * 60 + s;
-      }
-      console.warn(`Invalid time format for value: ${value}`);
-    }
-
-    return 0; // Fallback for invalid input
-  };
 
   // Format seconds to MM:SS
   const formatTime = (seconds: number): string => {
