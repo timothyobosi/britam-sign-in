@@ -1,14 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Typography, CircularProgress, Box } from '@mui/material';
 import MainCard from 'ui-component/cards/MainCard';
-import { getFinalScore, getCertificate } from 'safaricom-data/api/index';
-import JWTContext from 'contexts/JWTContext';
+import { getFinalScore } from 'safaricom-data/api/index';
 
-// Define QUIZ_BASE_URL locally
-const QUIZ_BASE_URL = `${import.meta.env.VITE_API_TARGET}/api/Quiz`;
 
 const CertificateTab: React.FC = () => {
-  const jwtContext = React.useContext(JWTContext);
   const token = localStorage.getItem('serviceToken');
   const [score, setScore] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -29,18 +25,37 @@ const CertificateTab: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${QUIZ_BASE_URL}/get-certificate`, {
+      // Call the correct API endpoint to get certificateUrl
+      const apiBase = import.meta.env.VITE_API_TARGET || '';
+      const resMeta = await fetch(`${apiBase}/api/Quiz/get-certificate`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+      if (!resMeta.ok) {
+        const errorText = await resMeta.text();
+        throw new Error(`HTTP error! status: ${resMeta.status} - ${errorText}`);
+      }
+      const meta = await resMeta.json();
+      const certificateUrlFromApi = meta?.certificateUrl;
+      if (!certificateUrlFromApi) throw new Error('Certificate URL not found');
+      // Prepend API base if needed
+      const fullUrl = certificateUrlFromApi.startsWith('http') ? certificateUrlFromApi : `${apiBase}${certificateUrlFromApi}`;
+      // Fetch the PDF as blob
+      const resPdf = await fetch(fullUrl, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': '*/*',
         },
       });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`HTTP error! status: ${res.status} - ${errorText}`);
+      if (!resPdf.ok) {
+        const errorText = await resPdf.text();
+        throw new Error(`HTTP error! status: ${resPdf.status} - ${errorText}`);
       }
-      const blob = await res.blob();
+      const blob = await resPdf.blob();
       const url = window.URL.createObjectURL(blob);
       setCertificateUrl(url);
       const link = document.createElement('a');
