@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Typography, CircularProgress, Box } from '@mui/material';
+import { Button, Typography, CircularProgress, Box, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 import MainCard from 'ui-component/cards/MainCard';
 import { getFinalScore } from 'safaricom-data/api/index';
-
 
 const CertificateTab: React.FC = () => {
   const token = localStorage.getItem('serviceToken');
@@ -10,6 +9,7 @@ const CertificateTab: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [certificateUrl, setCertificateUrl] = useState<string | null>(null);
+  const [openPopup, setOpenPopup] = useState(false); // New state for popup
 
   useEffect(() => {
     if (!token) return;
@@ -22,10 +22,13 @@ const CertificateTab: React.FC = () => {
 
   const handleDownloadCertificate = async () => {
     if (!token) return;
+    if (score && score.scorePercent < 70) {
+      setOpenPopup(true);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      // Call the correct API endpoint to get certificateUrl
       const apiBase = import.meta.env.VITE_API_TARGET || '';
       const resMeta = await fetch(`${apiBase}/api/Quiz/get-certificate`, {
         method: 'GET',
@@ -41,9 +44,7 @@ const CertificateTab: React.FC = () => {
       const meta = await resMeta.json();
       const certificateUrlFromApi = meta?.certificateUrl;
       if (!certificateUrlFromApi) throw new Error('Certificate URL not found');
-      // Prepend API base if needed
       const fullUrl = certificateUrlFromApi.startsWith('http') ? certificateUrlFromApi : `${apiBase}${certificateUrlFromApi}`;
-      // Fetch the PDF as blob
       const resPdf = await fetch(fullUrl, {
         method: 'GET',
         headers: {
@@ -72,6 +73,10 @@ const CertificateTab: React.FC = () => {
     }
   };
 
+  const handleClosePopup = () => {
+    setOpenPopup(false);
+  };
+
   return (
     <MainCard title="My Certificate">
       {loading && <CircularProgress />}
@@ -83,7 +88,11 @@ const CertificateTab: React.FC = () => {
           <Typography>Correct Answers: {score.correctAnswers || 'N/A'}</Typography>
         </Box>
       )}
-      <Button variant="contained" onClick={handleDownloadCertificate} disabled={loading || !token}>
+      <Button
+        variant="contained"
+        onClick={handleDownloadCertificate}
+        disabled={loading || !token || (score && score.scorePercent < 70)}
+      >
         Download Certificate
       </Button>
       {certificateUrl && (
@@ -92,6 +101,20 @@ const CertificateTab: React.FC = () => {
           <a href={certificateUrl} target="_blank" rel="noopener noreferrer">View Certificate</a>
         </Box>
       )}
+      {/* Popup for failed score */}
+      <Dialog open={openPopup} onClose={handleClosePopup}>
+        <DialogTitle>Certificate Unavailable</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            You did not Meet the Passmark, Kindly redo the test.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClosePopup} color="primary" autoFocus>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </MainCard>
   );
 };

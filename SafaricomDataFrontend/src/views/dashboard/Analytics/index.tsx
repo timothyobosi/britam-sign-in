@@ -18,7 +18,8 @@ import Skeleton from '@mui/material/Skeleton';
 
 const Analytics = () => {
     const theme = useTheme();
-    const { user } = React.useContext(JWTContext);
+    const jwtContext = React.useContext(JWTContext);
+    const user = jwtContext?.user || {};
     const agentId = user?.agentId;
     const token = localStorage.getItem('serviceToken');
 
@@ -60,7 +61,7 @@ const Analytics = () => {
     });
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [trainingModules, setTrainingModules] = useState<authApi.TrainingModule[]>([]);
+    const [trainingModules, setTrainingModules] = useState<any[]>([]);
 
     // Persist state to localStorage whenever it changes
     useEffect(() => {
@@ -110,7 +111,7 @@ const Analytics = () => {
                     setTrainingModules(modulesData);
 
                     // Fetch scores
-                    const scorePromises = [1, 2, 3, 4].map((moduleId) => authApi.getQuizScore(token, agentId, moduleId));
+                    const scorePromises = [1, 2, 3, 4].map((moduleId) => authApi.getQuizScore(token, Number(agentId), moduleId));
                     const scoreData = await Promise.all(scorePromises);
                     console.log('Fetched scores:', scoreData);
                     setScores(scoreData);
@@ -120,7 +121,7 @@ const Analytics = () => {
                         console.error('Failed to save analytics_scores:', e);
                     }
                     const submittedState = scoreData.reduce(
-                        (acc, score, index) => ({
+                        (acc: any, score: any, index: number) => ({
                             ...acc,
                             [index + 1]: score.answered === score.totalQuestions,
                         }),
@@ -277,8 +278,40 @@ const Analytics = () => {
         </Box>
     );
 
+    // Calculate overall score
+    const totalQuestions = scores.reduce((acc: number, s: any) => acc + (s?.totalQuestions || 0), 0);
+    const correctAnswers = scores.reduce((acc: number, s: any) => acc + (s?.correctAnswers || 0), 0);
+    const wrongAnswers = scores.reduce((acc: number, s: any) => acc + (s?.wrongAnswers || 0), 0);
+    const scorePercent = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+
+    // Redo logic
+    const handleRedoTest = () => {
+        setSelectedModule(null);
+        setSelectedAnswers({});
+        setIsSubmitted({});
+        // Optionally clear localStorage cache for answers/submitted
+        localStorage.removeItem('analytics_selectedAnswers');
+        localStorage.removeItem('analytics_isSubmitted');
+    };
+
     return (
         <Grid container spacing={3}>
+            <Grid item xs={12}>
+                <MainCard title="Test Results">
+                    <Typography variant="h6">Final Score: {scorePercent}%</Typography>
+                    <Typography>Total Questions: {totalQuestions}</Typography>
+                    <Typography>Correct Answers: {correctAnswers}</Typography>
+                    {/* <Typography>Wrong Answers: {wrongAnswers}</Typography> */}
+                    <Button
+                        variant="contained"
+                        color={scorePercent < 70 ? 'error' : 'primary'}
+                        sx={{ mt: 2 }}
+                        onClick={handleRedoTest}
+                    >
+                        Redo Test
+                    </Button>
+                </MainCard>
+            </Grid>
             {selectedModule === null
                 ? // Show all modules
                 [1, 2, 3, 4].map((moduleId) => (
