@@ -175,7 +175,7 @@ const ProfileSection = () => {
                                                 </Stack>
                                                 <Typography variant="subtitle2">Project Admin</Typography>
                                             </Stack>
-                                            <OutlinedInput
+                                            {/* <OutlinedInput
                                                 sx={{ width: '100%', pr: 1, pl: 2, my: 2 }}
                                                 id="input-search-profile"
                                                 value={value}
@@ -190,14 +190,14 @@ const ProfileSection = () => {
                                                 inputProps={{
                                                     'aria-label': 'weight'
                                                 }}
-                                            />
+                                            /> */}
                                             <Divider />
                                         </Box>
                                         <PerfectScrollbar style={{ height: '100%', maxHeight: 'calc(100vh - 250px)', overflowX: 'hidden' }}>
                                             <Box sx={{ p: 2, pt: 0 }}>
-                                                <UpgradePlanCard />
+                                                {/* <UpgradePlanCard /> */}
                                                 <Divider />
-                                                <Card sx={{ bgcolor: mode === ThemeMode.DARK ? 'dark.800' : 'primary.light', my: 2 }}>
+                                                {/* <Card sx={{ bgcolor: mode === ThemeMode.DARK ? 'dark.800' : 'primary.light', my: 2 }}>
                                                     <CardContent>
                                                         <Grid container spacing={3} direction="column">
                                                             <Grid item>
@@ -233,7 +233,7 @@ const ProfileSection = () => {
                                                             </Grid>
                                                         </Grid>
                                                     </CardContent>
-                                                </Card>
+                                                </Card> */}
                                                 <Divider />
                                                 <List
                                                     component="nav"
@@ -245,7 +245,7 @@ const ProfileSection = () => {
                                                         '& .MuiListItemButton-root': { mt: 0.5 }
                                                     }}
                                                 >
-                                                    <ListItemButton
+                                                    {/* <ListItemButton
                                                         sx={{ borderRadius: `${borderRadius}px` }}
                                                         selected={selectedIndex === 0}
                                                         onClick={(event) =>
@@ -262,8 +262,8 @@ const ProfileSection = () => {
                                                                 </Typography>
                                                             }
                                                         />
-                                                    </ListItemButton>
-                                                    <ListItemButton
+                                                    </ListItemButton> */}
+                                                    {/* <ListItemButton
                                                         sx={{ borderRadius: `${borderRadius}px` }}
                                                         selected={selectedIndex === 1}
                                                         onClick={(event) =>
@@ -292,7 +292,7 @@ const ProfileSection = () => {
                                                                 </Grid>
                                                             }
                                                         />
-                                                    </ListItemButton>
+                                                    </ListItemButton> */}
                                                     <ListItemButton
                                                         sx={{ borderRadius: `${borderRadius}px` }}
                                                         selected={selectedIndex === 4}
