@@ -162,11 +162,26 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         console.log(`Loading cached module ${id}:`, cachedModule);
         setSelectedModule(cachedModule);
         const savedProgress = localStorage.getItem(`audioProgress_${id}`);
-        setCurrentTime(savedProgress ? normalizeToSeconds(savedProgress) : cachedModule.watchTime || 0);
+        const savedSeconds = savedProgress ? normalizeToSeconds(savedProgress) : 0;
+        const initialTime = cachedModule.isComplete ? cachedModule.duration : Math.max(savedSeconds, cachedModule.watchTime);
+        setCurrentTime(initialTime);
         setInitialPlaybackTime(0);
         setAudioDuration(0);
         setAudioError(null);
         setIsLoading(false);
+
+        // Sync offline progress if local > server and incomplete
+        if (!cachedModule.isComplete && savedSeconds > cachedModule.watchTime && navigator.onLine && token) {
+          authApi.updateTrainingProgress(token, id, savedSeconds)
+            .then(() => {
+              setSelectedModule(prev => prev ? { ...prev, watchTime: savedSeconds } : null);
+              setModules(prev => prev.map(m => m.moduleId === id ? { ...m, watchTime: savedSeconds } : m));
+              // Update cache
+              const updatedCache = cachedModules.map(m => m.moduleId === id ? { ...m, watchTime: savedSeconds } : m);
+              localStorage.setItem('trainingModules_cache', JSON.stringify({ data: updatedCache, timestamp: Date.now() }));
+            })
+            .catch(err => console.error('Failed to sync offline progress:', err));
+        }
       } else {
         authApi
           .getTrainingById(token, id)
@@ -187,10 +202,25 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
             const updatedCache = [...cachedModules.filter((m) => m.moduleId !== id), normalizedModule];
             localStorage.setItem('trainingModules_cache', JSON.stringify({ data: updatedCache, timestamp: Date.now() }));
             const savedProgress = localStorage.getItem(`audioProgress_${id}`);
-            setCurrentTime(savedProgress ? normalizeToSeconds(savedProgress) : cappedWatchTime || 0);
+            const savedSeconds = savedProgress ? normalizeToSeconds(savedProgress) : 0;
+            const initialTime = normalizedModule.isComplete ? normalizedModule.duration : Math.max(savedSeconds, normalizedModule.watchTime);
+            setCurrentTime(initialTime);
             setInitialPlaybackTime(0);
             setAudioDuration(0);
             setAudioError(null);
+
+            // Sync offline progress if local > server and incomplete
+            if (!normalizedModule.isComplete && savedSeconds > normalizedModule.watchTime && navigator.onLine && token) {
+              authApi.updateTrainingProgress(token, id, savedSeconds)
+                .then(() => {
+                  setSelectedModule(prev => prev ? { ...prev, watchTime: savedSeconds } : null);
+                  setModules(prev => prev.map(m => m.moduleId === id ? { ...m, watchTime: savedSeconds } : m));
+                  // Update cache
+                  const updatedCacheSync = updatedCache.map(m => m.moduleId === id ? { ...m, watchTime: savedSeconds } : m);
+                  localStorage.setItem('trainingModules_cache', JSON.stringify({ data: updatedCacheSync, timestamp: Date.now() }));
+                })
+                .catch(err => console.error('Failed to sync offline progress:', err));
+            }
           })
           .catch((error: any) => {
             console.error('Error fetching module details:', error);
@@ -201,7 +231,9 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       // Load offline progress if available
       if (!navigator.onLine) {
         const savedProgress = localStorage.getItem(`audioProgress_${id}`);
-        setCurrentTime(savedProgress ? normalizeToSeconds(savedProgress) : cachedModule?.watchTime || 0);
+        const savedSeconds = savedProgress ? normalizeToSeconds(savedProgress) : 0;
+        const initialTime = cachedModule?.isComplete ? cachedModule.duration : Math.max(savedSeconds, cachedModule?.watchTime || 0);
+        setCurrentTime(initialTime);
       }
     } else {
       setSelectedModule(null);
@@ -582,7 +614,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                     src={`https://brm-partners.britam.com${selectedModule.filePath}?v=${selectedModule.updateDate || Date.now()}`}
                     listenInterval={1000}
                     onLoadedMetadata={() => {
-                      // Set initial playback position from saved progress
+                      // Set initial playback position from currentTime
                       if (audioRef.current?.audio && currentTime > 0) {
                         audioRef.current.audio.currentTime = currentTime;
                       }
@@ -631,12 +663,12 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                             justifyContent: 'center',
                           }}
                         >
-                          {/* <IconButton onClick={handleRewind} color="primary">
+                          <IconButton onClick={handleRewind} color="primary">
                             <FaUndo />
                           </IconButton>
                           <IconButton onClick={handleRestart} color="primary">
                             <FaUndo style={{ transform: 'rotate(180deg)' }} />
-                          </IconButton> */}
+                          </IconButton>
                           <Button variant="contained" onClick={handleClose} sx={{ mt: 1 }}>
                             Close
                           </Button>
@@ -658,7 +690,9 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                         variant="contained"
                         startIcon={<FaArrowRight />}
                         onClick={handleNextModule}
-                        disabled={modules.every((m) => m.isComplete)}
+                        disabled={
+                          modules.findIndex((m) => m.moduleId > selectedModule.moduleId && !m.isComplete) === -1
+                        }
                         sx={{ mt: 2 }}
                       >
                         Next Module
