@@ -91,20 +91,6 @@ export async function submitQuizAnswers(
 const BASE_URL = `${import.meta.env.VITE_API_TARGET}${import.meta.env.VITE_API_BASE_URL}`;
 const TRAINING_BASEURL = `${import.meta.env.VITE_API_TARGET}${import.meta.env.VITE_TRAINING_BASE_URL}`;
 
-// Normalize utility (to be moved to service layer later)
-const normalizeToSeconds = (value: any): number => {
-    if (!value && value !== 0) return 0;
-    if (typeof value === 'number' && !isNaN(value)) return Math.floor(value);
-    if (typeof value === 'string') {
-        const parts = value.split(':').map(Number).filter(n => !isNaN(n));
-        if (parts.length === 2) {
-            const [m, s] = parts;
-            return m * 60 + s;
-        }
-    }
-    return 0;
-};
-
 export async function getAllTrainingModules(token: string, agentId?: number): Promise<TrainingModule[]> {
     const res = await fetch(`${TRAINING_BASEURL}/all-modules?ts=${Date.now()}`, {
         method: 'GET',
@@ -126,9 +112,9 @@ export async function getAllTrainingModules(token: string, agentId?: number): Pr
         return {
             moduleId: module.moduleid,
             title: module.title,
-            duration: normalizeToSeconds(module.duration),
+            duration: module.duration,
             filePath: module.filepath,
-            watchTime: normalizeToSeconds(progress.watchtime) || 0,
+            watchTime: progress.watchtime || 0,
             isComplete: !!progress.iscomplete,
             status: progress.status || 'Not Started',
             sequence: module.sequence,
@@ -149,19 +135,17 @@ export async function getTrainingById(token: string, id: number): Promise<Traini
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     const data = await res.json();
-    const duration = normalizeToSeconds(data.duration);
-    const watchTime = normalizeToSeconds(data.watchtime ?? data.watchTime);
     return {
-        moduleId: data.moduleid,       // Match API response
+        moduleId: data.moduleId,
         title: data.title,
-        duration,
-        filePath: data.filepath,       // Match API response
-        watchTime: Math.min(watchTime, duration),
-        isComplete: !!data.iscomplete, // Match API response
+        duration: data.duration,
+        filePath: data.filePath,
+        watchTime: data.watchTime || 0,
+        isComplete: data.isComplete || false,
         status: data.status || 'Not Started',
         sequence: data.sequence,
-        dateCreated: data.datecreated, // Match API response
-        updateDate: data.updatedate,   // Match API response
+        dateCreated: data.dateCreated,
+        updateDate: data.updateDate,
     };
 }
 
