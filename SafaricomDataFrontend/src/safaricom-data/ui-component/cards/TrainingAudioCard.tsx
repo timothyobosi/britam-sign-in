@@ -43,11 +43,21 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
           return [];
         }
         if (Array.isArray(data)) {
-          return data.map((m) => ({
-            ...m,
-            duration: normalizeToSeconds(m.duration),
-            watchTime: Math.min(normalizeToSeconds(m.watchTime), normalizeToSeconds(m.duration)),
-          }));
+          return data.map((m) => {
+            const duration = normalizeToSeconds(m.duration);
+            const apiWatchTime = normalizeToSeconds(m.watchTime);
+            const savedProgress = localStorage.getItem(`audioProgress_${m.moduleId}`);
+            const localWatchTime = savedProgress ? normalizeToSeconds(savedProgress) : 0;
+
+            return {
+              ...m,
+              duration,
+              watchTime: m.isComplete
+                ? duration
+                : Math.min(Math.max(apiWatchTime, localWatchTime), duration),
+            };
+          });
+
         }
       }
     } catch (e) {
@@ -96,13 +106,19 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         .then((data) => {
           const normalized = data.map((m) => {
             const duration = normalizeToSeconds(m.duration);
-            const watchTime = normalizeToSeconds(m.watchTime);
+            const apiWatchTime = normalizeToSeconds(m.watchTime);
+            const savedProgress = localStorage.getItem(`audioProgress_${m.moduleId}`);
+            const localWatchTime = savedProgress ? normalizeToSeconds(savedProgress) : 0;
+
             return {
               ...m,
               duration,
-              watchTime: m.isComplete ? duration : Math.min(watchTime, duration),
+              watchTime: m.isComplete
+                ? duration
+                : Math.min(Math.max(apiWatchTime, localWatchTime), duration),
             };
           });
+
 
           // localStorage.setItem('trainingModules_cache', JSON.stringify({ data: normalized, timestamp: Date.now() }));
           setModules(normalized.sort((a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)));
