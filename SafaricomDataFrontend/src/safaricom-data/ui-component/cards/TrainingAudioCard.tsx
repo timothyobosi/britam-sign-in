@@ -243,45 +243,61 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   }, [moduleId, selectedModule, token]);
 
   // Update progress on server
-  // ✅ ensure updateProgress just trusts the provided time
-  const updateProgress = async (moduleId: number, watchedSeconds: number) => {
-    if (token && selectedModule && !isUpdating) {
-      setIsUpdating(true);
-      try {
-        // use provided watchedSeconds (from state)
-        const newWatchTime = Math.min(
-          watchedSeconds,
-          selectedModule.duration
-        );
+ // ✅ ensure updateProgress just trusts the provided time
+const updateProgress = async (moduleId: number, watchedSeconds: number) => {
+  if (token && selectedModule && !isUpdating) {
+    setIsUpdating(true);
+    try {
+      // clamp progress so it never exceeds duration
+      const newWatchTime = Math.min(watchedSeconds, selectedModule.duration);
 
-        console.log(
-          `Updating progress → moduleId=${moduleId}, watchedSeconds=${formatTime(
-            watchedSeconds
-          )}, final newWatchTime=${formatTime(newWatchTime)}`
-        );
+      console.log(
+        `Updating progress → moduleId=${moduleId}, watchedSeconds=${formatTime(
+          watchedSeconds
+        )}, final newWatchTime=${formatTime(newWatchTime)}`
+      );
 
-        const response = await authApi.updateTrainingProgress(
-          token,
-          moduleId,
-          newWatchTime
-        );
-        console.log("Update progress response:", response);
+      const response = await authApi.updateTrainingProgress(
+        token,
+        moduleId,
+        newWatchTime
+      );
+      console.log("Update progress response:", response);
 
-        setSelectedModule((prev) =>
-          prev?.moduleId === moduleId
-            ? { ...prev, watchTime: newWatchTime }
-            : prev
-        );
-      } catch (error) {
-        console.error("Error saving progress:", error);
-        setAudioError("Failed to save progress");
-      } finally {
-        setIsUpdating(false);
-      }
+      // ✅ mark complete locally if fully watched
+      const isComplete = newWatchTime >= selectedModule.duration;
+
+      setSelectedModule((prev) =>
+        prev?.moduleId === moduleId
+          ? {
+              ...prev,
+              watchTime: newWatchTime,
+              isComplete,
+              status: isComplete ? "Completed" : "In Progress",
+            }
+          : prev
+      );
+
+      setModules((prev) =>
+        prev.map((m) =>
+          m.moduleId === moduleId
+            ? {
+                ...m,
+                watchTime: newWatchTime,
+                isComplete,
+                status: isComplete ? "Completed" : "In Progress",
+              }
+            : m
+        )
+      );
+    } catch (error) {
+      console.error("Error saving progress:", error);
+      setAudioError("Failed to save progress");
+    } finally {
+      setIsUpdating(false);
     }
-  };
-
-
+  }
+};
 
 
   const handleModuleSelect = (moduleId: number) => {
