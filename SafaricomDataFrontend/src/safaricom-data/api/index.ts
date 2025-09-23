@@ -8,7 +8,7 @@ export async function getFinalScore(token: string): Promise<any> {
         headers: {
             'Authorization': `Bearer ${token}`,
             'Accept': '*/*',
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache', // Prevent caching
         },
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -21,7 +21,7 @@ export async function getCertificate(token: string): Promise<Blob> {
         headers: {
             'Authorization': `Bearer ${token}`,
             'Accept': '*/*',
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache', // Prevent caching
         },
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -35,7 +35,7 @@ export async function getQuizQuestions(token: string, moduleId: number): Promise
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
             'Accept': '*/*',
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache', // Prevent caching
         },
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -50,7 +50,7 @@ export async function getQuizScore(token: string, agentId: number, moduleId: num
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
             'Accept': '*/*',
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache', // Prevent caching
         },
     });
     if (!res.ok) {
@@ -91,36 +91,44 @@ export async function submitQuizAnswers(
 const BASE_URL = `${import.meta.env.VITE_API_TARGET}${import.meta.env.VITE_API_BASE_URL}`;
 const TRAINING_BASEURL = `${import.meta.env.VITE_API_TARGET}${import.meta.env.VITE_TRAINING_BASE_URL}`;
 
+// Normalize utility (to be moved to service layer later)
+const normalizeToSeconds = (value: any): number => {
+    if (!value && value !== 0) return 0;
+    if (typeof value === 'number' && !isNaN(value)) return Math.floor(value);
+    if (typeof value === 'string') {
+        const parts = value.split(':').map(Number).filter(n => !isNaN(n));
+        if (parts.length === 2) {
+            const [m, s] = parts;
+            return m * 60 + s;
+        }
+    }
+    return 0;
+};
+
 export async function getAllTrainingModules(token: string, agentId?: number): Promise<TrainingModule[]> {
     const res = await fetch(`${TRAINING_BASEURL}/all-modules?ts=${Date.now()}`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache', // Prevent caching
         },
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     const data = await res.json();
     console.log('Raw API data:', data);
     return data.map((module: any) => {
-        // Prioritize completed progress or highest watchtime
+        // Select the latest progress for the current agent based on lastupdated
         const agentProgress = agentId
-            ? module.trainingProgresses?.reduce((latest: any, progress: any) => {
-                // Prefer completed progress; if tied, take highest watchtime
-                if (!latest) return progress;
-                if (progress.iscomplete && !latest.iscomplete) return progress;
-                if (!progress.iscomplete && latest.iscomplete) return latest;
-                return progress.watchtime > latest.watchtime ? progress : latest;
-              }, null)
+            ? module.trainingProgresses?.sort((a: any, b: any) => new Date(b.lastupdated).getTime() - new Date(a.lastupdated).getTime())[0]
             : module.trainingProgresses[0];
         const progress = agentProgress || {};
         return {
             moduleId: module.moduleid,
             title: module.title,
-            duration: module.duration,
+            duration: normalizeToSeconds(module.duration),
             filePath: module.filepath,
-            watchTime: progress.watchtime || 0,
+            watchTime: normalizeToSeconds(progress.watchtime) || 0,
             isComplete: !!progress.iscomplete,
             status: progress.status || 'Not Started',
             sequence: module.sequence,
@@ -136,22 +144,24 @@ export async function getTrainingById(token: string, id: number): Promise<Traini
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache', // Prevent caching
         },
     });
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     const data = await res.json();
+    const duration = normalizeToSeconds(data.duration);
+    const watchTime = normalizeToSeconds(data.watchtime ?? data.watchTime);
     return {
-        moduleId: data.moduleId,
+        moduleId: data.moduleid,       // Match API response
         title: data.title,
-        duration: data.duration,
-        filePath: data.filePath,
-        watchTime: data.watchTime || 0,
-        isComplete: data.isComplete || false,
+        duration,
+        filePath: data.filepath,       // Match API response
+        watchTime: Math.min(watchTime, duration),
+        isComplete: !!data.iscomplete, // Match API response
         status: data.status || 'Not Started',
         sequence: data.sequence,
-        dateCreated: data.dateCreated,
-        updateDate: data.updateDate,
+        dateCreated: data.datecreated, // Match API response
+        updateDate: data.updatedate,   // Match API response
     };
 }
 

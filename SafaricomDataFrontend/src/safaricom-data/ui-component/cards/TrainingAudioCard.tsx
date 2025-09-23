@@ -6,44 +6,35 @@ import { FaUndo, FaArrowRight } from 'react-icons/fa';
 import { useNavigate, useLocation, useParams, useMatch } from 'react-router-dom';
 import MainCard from 'ui-component/cards/MainCard';
 import SkeletonTotalOrderCard from 'ui-component/cards/Skeleton/EarningCard';
-import ReactH5AudioPlayer from 'react-h5-audio-player';
-import 'react-h5-audio-player/lib/styles.css';
-import * as authApi from 'safaricom-data/api/index';
+import { fetchModules, fetchModuleById, saveProgress } from 'services/audioService' 
 import JWTContext from 'contexts/JWTContext';
 
 interface TrainingAudioCardProps {
   isLoading?: boolean;
 }
 
-// Normalize time to seconds (handles MM:SS strings or numbers as seconds)
+// Normalize time to seconds with better error handling (can be removed once service is fully trusted)
 const normalizeToSeconds = (value: any): number => {
-  if (!value) return 0;
-
-  if (typeof value === 'number' && !isNaN(value)) {
-    return Math.floor(value); // Assume number is in seconds
-  }
-
+  if (!value && value !== 0) return 0;
+  if (typeof value === 'number' && !isNaN(value)) return Math.floor(value);
   if (typeof value === 'string') {
-    // Expect MM:SS format
     const parts = value.split(':').map(Number).filter(n => !isNaN(n));
     if (parts.length === 2) {
       const [m, s] = parts;
       return m * 60 + s;
     }
-    console.warn(`Invalid time format for value: ${value}`);
+    console.warn(`Invalid time format for value: ${value}, defaulting to 0`);
   }
-
-  return 0; // Fallback for invalid input
+  console.warn(`Invalid time value: ${value}, defaulting to 0`);
+  return 0;
 };
 
 const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLoading = false }) => {
-  // Helper: get cached modules from localStorage
   const getCachedModules = () => {
     try {
       const cached = localStorage.getItem('trainingModules_cache');
       if (cached) {
         const { data, timestamp } = JSON.parse(cached);
-        // Cache expires after 1 hour
         if (Date.now() - timestamp > 60 * 60 * 1000) {
           localStorage.removeItem('trainingModules_cache');
           return [];
@@ -64,7 +55,7 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   const theme = useTheme();
   const jwtContext = React.useContext(JWTContext);
-  const agentId = jwtContext && 'user' in jwtContext ? (jwtContext as any).user?.agentId : undefined;
+  const agentId = jwtContext?.user?.agentId;
   const token = localStorage.getItem('serviceToken');
   const navigate = useNavigate();
   const location = useLocation();
@@ -74,21 +65,14 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   const [modules, setModules] = useState<authApi.TrainingModule[]>(getCachedModules());
   const [selectedModule, setSelectedModule] = useState<authApi.TrainingModule | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
-  const audioRef = useRef<ReactH5AudioPlayer | null>(null);
-  const [currentTime, setCurrentTime] = useState<number>(() => {
-    if (moduleId) {
-      const saved = localStorage.getItem(`audioProgress_${moduleId}`);
-      return saved ? normalizeToSeconds(saved) : 0;
-    }
-    return 0;
-  });
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [currentTime, setCurrentTime] = useState<number>(0);
   const [initialPlaybackTime, setInitialPlaybackTime] = useState<number>(0);
-  const [audioDuration, setAudioDuration] = useState<number>(0);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [isPollingDisabled, setIsPollingDisabled] = useState<boolean>(false);
 
-  // Format seconds to MM:SS
   const formatTime = (seconds: number): string => {
     if (!seconds || isNaN(seconds)) return '0:00';
-
     const totalSeconds = Math.floor(seconds);
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
@@ -97,36 +81,18 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   // Fetch all modules
   useEffect(() => {
-    if (!jwtContext || !jwtContext.isInitialized || !jwtContext.user) return;
-    const agentId = Number(jwtContext.user.agentId);
-    const token = localStorage.getItem('serviceToken');
-    if (!token) {
-      const cached = getCachedModules();
-      if (cached.length > 0) {
-        setModules(cached);
-        setAudioError('Loaded cached modules due to missing token.');
-      } else {
-        setAudioError('No valid token found.');
-      }
-      setIsLoading(false);
-      return;
-    }
+    if (!jwtContext?.isInitialized || !jwtContext.user || !token) return;
     setIsLoading(true);
     if (navigator.onLine) {
-      authApi
-        .getAllTrainingModules(token, agentId)
-        .then((data: authApi.TrainingModule[]) => {
-          const normalized = data.map((m) => ({
-            ...m,
-            duration: normalizeToSeconds(m.duration),
-            watchTime: Math.min(normalizeToSeconds(m.watchTime), normalizeToSeconds(m.duration)),
-          }));
+      fetchModules(token, Number(agentId))
+        .then((normalized) => {
+          console.log('Normalized API data:', normalized);
           localStorage.setItem('trainingModules_cache', JSON.stringify({ data: normalized, timestamp: Date.now() }));
           setModules(normalized.sort((a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)));
           setAudioError(null);
         })
         .catch((err) => {
-          console.error('Failed to fetch modules:', err);
+          console.error('Error fetching modules:', err);
           const cached = getCachedModules();
           if (cached.length > 0) {
             setModules(cached);
@@ -146,124 +112,90 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
       }
       setIsLoading(false);
     }
-  }, [jwtContext]);
+  }, [jwtContext, token, agentId]);
 
-  // Fetch selected module details when moduleId changes
+  // Initialize selected module and currentTime
   useEffect(() => {
-    console.log('useEffect triggered for moduleId:', moduleId, 'token:', token);
     const id = moduleId ? parseInt(moduleId, 10) : null;
     if (id && !isNaN(id) && token && match) {
       setIsLoading(true);
-      console.log('Fetching module details for moduleId:', id);
-      // Check cache first
       const cachedModules = getCachedModules();
       const cachedModule = cachedModules.find((m) => m.moduleId === id);
-      if (cachedModule && navigator.onLine) {
-        console.log(`Loading cached module ${id}:`, cachedModule);
+      const savedProgress = localStorage.getItem(`audioProgress_${id}`);
+      const savedSeconds = savedProgress ? normalizeToSeconds(savedProgress) : 0;
+
+      if (cachedModule && !navigator.onLine) {
         setSelectedModule(cachedModule);
-        const savedProgress = localStorage.getItem(`audioProgress_${id}`);
-        const savedSeconds = savedProgress ? normalizeToSeconds(savedProgress) : 0;
-        const initialTime = cachedModule.isComplete ? cachedModule.duration : Math.max(savedSeconds, cachedModule.watchTime);
-        setCurrentTime(initialTime);
-        setInitialPlaybackTime(0);
-        setAudioDuration(0);
-        setAudioError(null);
+        setCurrentTime(cachedModule.isComplete ? cachedModule.duration : savedSeconds);
+        console.log(`Loaded cached module ${id}, currentTime: ${formatTime(currentTime)}`);
         setIsLoading(false);
-
-        // Sync offline progress if local > server and incomplete
-        if (!cachedModule.isComplete && savedSeconds > cachedModule.watchTime && navigator.onLine && token) {
-          authApi.updateTrainingProgress(token, id, savedSeconds)
-            .then(() => {
-              setSelectedModule(prev => prev ? { ...prev, watchTime: savedSeconds } : null);
-              setModules(prev => prev.map(m => m.moduleId === id ? { ...m, watchTime: savedSeconds } : m));
-              // Update cache
-              const updatedCache = cachedModules.map(m => m.moduleId === id ? { ...m, watchTime: savedSeconds } : m);
-              localStorage.setItem('trainingModules_cache', JSON.stringify({ data: updatedCache, timestamp: Date.now() }));
-            })
-            .catch(err => console.error('Failed to sync offline progress:', err));
-        }
       } else {
-        authApi
-          .getTrainingById(token, id)
-          .then((module: authApi.TrainingModule) => {
-            const duration = normalizeToSeconds(module.duration);
-            const watchTime = normalizeToSeconds(module.watchTime);
-            const cappedWatchTime = Math.min(watchTime, duration);
-            const normalizedModule = {
-              ...module,
-              duration,
-              watchTime: cappedWatchTime,
-            };
-            console.log(
-              `Selected Module ${id} - Title: ${module.title}, Raw duration: ${module.duration}, Normalized: ${duration}, Raw watchTime: ${module.watchTime}, Normalized: ${watchTime}, Capped: ${cappedWatchTime}`
-            );
+        fetchModuleById(token, id)
+          .then((normalizedModule) => {
+            console.log('Normalized module data:', normalizedModule);
             setSelectedModule(normalizedModule);
-            // Update cache with new module data
-            const updatedCache = [...cachedModules.filter((m) => m.moduleId !== id), normalizedModule];
-            localStorage.setItem('trainingModules_cache', JSON.stringify({ data: updatedCache, timestamp: Date.now() }));
-            const savedProgress = localStorage.getItem(`audioProgress_${id}`);
-            const savedSeconds = savedProgress ? normalizeToSeconds(savedProgress) : 0;
-            const initialTime = normalizedModule.isComplete ? normalizedModule.duration : Math.max(savedSeconds, normalizedModule.watchTime);
-            setCurrentTime(initialTime);
-            setInitialPlaybackTime(0);
-            setAudioDuration(0);
-            setAudioError(null);
-
-            // Sync offline progress if local > server and incomplete
-            if (!normalizedModule.isComplete && savedSeconds > normalizedModule.watchTime && navigator.onLine && token) {
-              authApi.updateTrainingProgress(token, id, savedSeconds)
-                .then(() => {
-                  setSelectedModule(prev => prev ? { ...prev, watchTime: savedSeconds } : null);
-                  setModules(prev => prev.map(m => m.moduleId === id ? { ...m, watchTime: savedSeconds } : m));
-                  // Update cache
-                  const updatedCacheSync = updatedCache.map(m => m.moduleId === id ? { ...m, watchTime: savedSeconds } : m);
-                  localStorage.setItem('trainingModules_cache', JSON.stringify({ data: updatedCacheSync, timestamp: Date.now() }));
-                })
-                .catch(err => console.error('Failed to sync offline progress:', err));
-            }
+            setCurrentTime(normalizedModule.isComplete ? normalizedModule.duration : savedSeconds);
+            console.log(`Fetched module ${id}, currentTime: ${formatTime(currentTime)}`);
           })
-          .catch((error: any) => {
-            console.error('Error fetching module details:', error);
-            setAudioError(`Failed to load module ${id}: ${error.message}`);
+          .catch((err) => {
+            console.error('Error fetching module by ID:', err);
+            setAudioError(`Failed to load module ${id}: ${err.message}`);
           })
           .finally(() => setIsLoading(false));
-      }
-      // Load offline progress if available
-      if (!navigator.onLine) {
-        const savedProgress = localStorage.getItem(`audioProgress_${id}`);
-        const savedSeconds = savedProgress ? normalizeToSeconds(savedProgress) : 0;
-        const initialTime = cachedModule?.isComplete ? cachedModule.duration : Math.max(savedSeconds, cachedModule?.watchTime || 0);
-        setCurrentTime(initialTime);
       }
     } else {
       setSelectedModule(null);
       setCurrentTime(0);
-      setInitialPlaybackTime(0);
-      setAudioDuration(0);
       setAudioError(null);
       setIsLoading(false);
     }
   }, [moduleId, token, match]);
 
-  // Save audio progress to localStorage whenever currentTime changes
+  // Polling for real-time updates
   useEffect(() => {
-    if (moduleId && selectedModule) {
+    let interval: NodeJS.Timeout;
+    if (selectedModule && token && navigator.onLine && !isPollingDisabled) {
+      interval = setInterval(() => {
+        fetchModuleById(token, selectedModule.moduleId)
+          .then((updatedModule) => {
+            const duration = updatedModule.duration;
+            const watchTime = updatedModule.watchTime;
+            const cappedWatchTime = Math.min(watchTime, duration);
+            if (cappedWatchTime > currentTime) {
+              setSelectedModule(prev => prev ? { ...prev, watchTime: cappedWatchTime, isComplete: updatedModule.isComplete } : null);
+              setModules(prev => prev.map(m => m.moduleId === updatedModule.moduleId ? { ...m, watchTime: cappedWatchTime, isComplete: updatedModule.isComplete } : m));
+            }
+            console.log(`Polled module ${selectedModule.moduleId}, watchTime: ${formatTime(cappedWatchTime)}, currentTime: ${formatTime(currentTime)}`);
+          })
+          .catch(err => {
+            console.error('Polling failed:', err);
+            if (err.response?.status === 500) {
+              setIsPollingDisabled(true);
+              console.log('Polling disabled due to repeated 500 errors');
+            }
+          });
+      }, 15000);
+    }
+    return () => clearInterval(interval);
+  }, [selectedModule, token, currentTime, isPollingDisabled]);
+
+  // Save progress to localStorage (skip for completed modules)
+  useEffect(() => {
+    if (moduleId && selectedModule && !selectedModule.isComplete) {
       const cappedCurrentTime = Math.min(currentTime, selectedModule.duration);
       localStorage.setItem(`audioProgress_${moduleId}`, String(cappedCurrentTime));
+      console.log(`Saved progress for ${moduleId}: ${formatTime(cappedCurrentTime)}`);
     }
   }, [currentTime, moduleId, selectedModule]);
 
-  // Save progress before page unload
+  // Save progress before unload (skip for completed modules)
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (audioRef.current?.audio && selectedModule) {
-        const time = Math.floor(audioRef.current.audio.currentTime);
+      if (audioRef.current && selectedModule && !selectedModule.isComplete) {
+        const time = Math.floor(audioRef.current.currentTime);
         localStorage.setItem(`audioProgress_${moduleId}`, String(time));
-        // Queue server update only if module is not completed
-        if (navigator.onLine && token && !selectedModule.isComplete) {
-          authApi.updateTrainingProgress(token, selectedModule.moduleId, time).catch((err) => {
-            console.error('Failed to save progress on unload:', err);
-          });
+        if (navigator.onLine && token) {
+          saveProgress(token, selectedModule.moduleId, time).catch((err) => console.error('Failed to save progress on unload:', err));
         }
       }
     };
@@ -271,320 +203,118 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [moduleId, selectedModule, token]);
 
-  // Save module progress
+  // Update progress on server (skip for completed modules)
   const updateProgress = async (moduleId: number, watchedSeconds: number) => {
-    if (token && selectedModule) {
+    if (selectedModule?.isComplete) {
+      console.log(`Skipping progress update for completed module ${moduleId}`);
+      return;
+    }
+
+    if (token && selectedModule && !isUpdating) {
+      setIsUpdating(true);
       try {
-        const validWatchedSeconds = Math.max(0, Number.isFinite(watchedSeconds) ? watchedSeconds : 0);
-        const sessionTime = Math.max(0, validWatchedSeconds - initialPlaybackTime);
-        const normalizedWatchTime = normalizeToSeconds(selectedModule.watchTime);
-        const normalizedDuration = normalizeToSeconds(selectedModule.duration);
-
-        // Skip progress update if module is already completed
-        if (selectedModule.isComplete && normalizedWatchTime >= normalizedDuration * 0.95) {
-          console.log(`Skipping progress update for completed module ${moduleId}`);
-          return;
-        }
-
-        // Cap watch time at duration
-        let newWatchTime = normalizedWatchTime + sessionTime;
-        newWatchTime = Math.min(newWatchTime, normalizedDuration);
-
-        console.log(
-          'Updating progress - moduleId:',
-          moduleId,
-          'sessionTime:',
-          sessionTime,
-          'newWatchTime:',
-          newWatchTime
-        );
-
-        const response = await authApi.updateTrainingProgress(token, moduleId, newWatchTime);
-        console.log('Progress update response:', response);
-
-        // Fetch updated module and list
-        const updatedModuleRaw = await authApi.getTrainingById(token, moduleId);
-        const duration = normalizeToSeconds(updatedModuleRaw.duration);
-        const watchTime = normalizeToSeconds(updatedModuleRaw.watchTime);
-        const cappedWatchTime = Math.min(watchTime, duration);
-        const updatedModule = {
-          ...updatedModuleRaw,
-          duration,
-          watchTime: cappedWatchTime,
-        };
-        setSelectedModule(updatedModule);
-
-        const updatedModulesRaw = await authApi.getAllTrainingModules(token, agentId);
-        const updatedModules = updatedModulesRaw.map((m) => {
-          const modDuration = normalizeToSeconds(m.duration);
-          const modWatchTime = normalizeToSeconds(m.watchTime);
-          return {
-            ...m,
-            duration: modDuration,
-            watchTime: Math.min(modWatchTime, modDuration),
-          };
-        });
-        // Update cache
-        localStorage.setItem('trainingModules_cache', JSON.stringify({ data: updatedModules, timestamp: Date.now() }));
-        setModules(
-          updatedModules.sort(
-            (a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)
-          )
-        );
-      } catch (error: any) {
-        console.error('Progress update failed:', error);
-        // Revert optimistic update
-        setModules((prevModules) =>
-          prevModules.map((m) =>
-            m.moduleId === moduleId
-              ? { ...m, watchTime: selectedModule.watchTime, isComplete: selectedModule.isComplete, status: selectedModule.status }
-              : m
-          )
-        );
-        throw error;
+        const newWatchTime = Math.min(watchedSeconds, selectedModule.duration);
+        console.log(`Updating progress → moduleId=${moduleId}, watchedSeconds=${formatTime(watchedSeconds)}, final newWatchTime=${formatTime(newWatchTime)}`);
+        await saveProgress(token, moduleId, newWatchTime);
+        setSelectedModule(prev => prev?.moduleId === moduleId ? { ...prev, watchTime: newWatchTime } : prev);
+        setModules(prev => prev.map(m => m.moduleId === moduleId ? { ...m, watchTime: newWatchTime } : m));
+      } catch (error) {
+        console.error('Error saving progress:', error);
+        setAudioError('Failed to save progress');
+      } finally {
+        setIsUpdating(false);
       }
     }
   };
 
   const handleModuleSelect = (moduleId: number) => {
-    console.log('handleModuleSelect triggered for moduleId:', moduleId, 'current modules:', modules);
-    const module = modules.find((m: authApi.TrainingModule) => m.moduleId === moduleId);
+    const module = modules.find((m) => m.moduleId === moduleId);
     if (module) {
-      const currentIndex = modules.findIndex((m: authApi.TrainingModule) => m.moduleId === moduleId);
-      const nextIncompleteIndex = modules.findIndex((m: authApi.TrainingModule) => !m.isComplete);
-      console.log('Current index:', currentIndex, 'Next incomplete index:', nextIncompleteIndex);
-      if (currentIndex <= nextIncompleteIndex || nextIncompleteIndex === -1 || module.isComplete) {
-        navigate(`/training/${moduleId}`);
-      } else {
-        setAudioError('Please complete the previous module before proceeding.');
-      }
-    } else {
-      console.log('Module not found in modules list:', moduleId);
-      setAudioError('Selected module not found.');
-    }
-  };
-
-  const handleClose = async () => {
-    if (!selectedModule) {
-      navigate('/training');
-      return;
-    }
-    try {
-      const watchedSeconds = audioRef.current?.audio
-        ? Math.floor(audioRef.current.audio.currentTime)
-        : currentTime;
-      const normalizedDuration = normalizeToSeconds(selectedModule.duration);
-      const newWatchTime = Math.min(watchedSeconds, normalizedDuration);
-      const isComplete = newWatchTime >= normalizedDuration * 0.95;
-
-      // Skip UI and API updates if module is already completed
-      if (selectedModule.isComplete && selectedModule.watchTime >= normalizedDuration * 0.95) {
-        console.log(`Skipping UI update for completed module ${selectedModule.moduleId}`);
-        setAudioError(null);
-        setSelectedModule(null);
-        navigate('/training');
+      const previousModule = modules.find(m => m.moduleId === moduleId - 1);
+      if (moduleId > 1 && previousModule && !previousModule.isComplete) {
+        setAudioError('You must complete the previous module first.');
         return;
       }
-
-      // Optimistic update to modules state
-      setModules((prevModules) =>
-        prevModules.map((m) =>
-          m.moduleId === selectedModule.moduleId
-            ? {
-                ...m,
-                watchTime: newWatchTime,
-                isComplete,
-                status: isComplete ? 'Completed' : m.status,
-              }
-            : m
-        )
-      );
-
-      // Update cache optimistically
-      const updatedModules = modules.map((m) =>
-        m.moduleId === selectedModule.moduleId
-          ? {
-              ...m,
-              watchTime: newWatchTime,
-              isComplete,
-              status: isComplete ? 'Completed' : m.status,
-            }
-          : m
-      );
-      localStorage.setItem(
-        'trainingModules_cache',
-        JSON.stringify({ data: updatedModules, timestamp: Date.now() })
-      );
-
-      // Save progress to server
-      await updateProgress(selectedModule.moduleId, watchedSeconds);
-
-      setAudioError(null);
-      setSelectedModule(null);
-      navigate('/training');
-    } catch (error) {
-      setAudioError('Failed to save progress. Please try again.');
+      navigate(`/training/${moduleId}`);
     }
   };
 
-  const handleTryAgain = () => {
-    if (selectedModule && !selectedModule.isComplete) {
-      updateProgress(selectedModule.moduleId, currentTime);
+  const handleClose = () => {
+    if (selectedModule) {
+      if (audioRef.current && !selectedModule.isComplete) {
+        const watchedSeconds = Math.floor(audioRef.current.currentTime);
+        updateProgress(selectedModule.moduleId, watchedSeconds);
+      }
+      setSelectedModule(null);
+      navigate('/training');
     }
-    setAudioError(null);
-    navigate('/training');
-    setSelectedModule(null);
   };
 
   const handleRewind = () => {
-    if (audioRef.current?.audio) {
-      audioRef.current.audio.currentTime = Math.max(0, audioRef.current.audio.currentTime - 10);
+    if (audioRef.current) {
+      audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 10);
     }
   };
 
   const handleRestart = () => {
-    if (audioRef.current?.audio) {
-      // Optional: Confirm reset for completed modules
-      if (selectedModule?.isComplete && !window.confirm('Restart completed audio from the beginning?')) {
-        return;
-      }
-      audioRef.current.audio.currentTime = 0;
-      localStorage.setItem(`audioProgress_${moduleId}`, '0');
+    if (audioRef.current) {
+      if (selectedModule?.isComplete && !window.confirm('Restart completed audio from the beginning?')) return;
+      audioRef.current.currentTime = 0;
       setCurrentTime(0);
-      audioRef.current.audio.play();
+      localStorage.setItem(`audioProgress_${moduleId}`, '0');
+      audioRef.current.play();
     }
   };
 
   const handleNextModule = () => {
     if (selectedModule && modules.length > 0) {
-      const currentIndex = modules.findIndex((m) => m.moduleId === selectedModule.moduleId);
-      const nextIndex = modules.findIndex(
-        (m) => m.moduleId > selectedModule.moduleId && !m.isComplete
-      );
-      if (nextIndex !== -1) {
-        navigate(`/training/${modules[nextIndex].moduleId}`);
-      } else {
-        console.log('No next incomplete module available');
-      }
+      const nextIndex = modules.findIndex(m => m.moduleId > selectedModule.moduleId && !m.isComplete);
+      console.log(`Next module index: ${nextIndex}`);
+      if (nextIndex !== -1) navigate(`/training/${modules[nextIndex].moduleId}`);
     }
   };
 
   if (isLoading) return <SkeletonTotalOrderCard />;
 
-  console.log(
-    'Rendering - location:',
-    location.pathname,
-    'modules:',
-    modules,
-    'moduleId:',
-    moduleId,
-    'selectedModule:',
-    selectedModule,
-    'audioError:',
-    audioError
-  );
-
   return (
-    <MainCard
-      border={false}
-      content={false}
-      sx={{
-        minHeight: '300px',
-        height: 'auto',
-        maxWidth: '100%',
-        overflow: 'visible',
-        [theme.breakpoints.down('sm')]: {
-          minHeight: '200px',
-          padding: 1,
-        },
-      }}
-    >
-      <Box
-        sx={{
-          p: 3,
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: theme.palette.grey[100],
-        }}
-      >
+    <MainCard border={false} content={false} sx={{ minHeight: '300px', height: 'auto', maxWidth: '100%', overflow: 'visible', [theme.breakpoints.down('sm')]: { minHeight: '200px', padding: 1 } }}>
+      <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', backgroundColor: theme.palette.grey[100] }}>
         {audioError ? (
           <Box sx={{ textAlign: 'center' }}>
-            <Typography color="error" align="center">
-              {audioError}
-            </Typography>
-            <Button variant="contained" onClick={handleTryAgain} sx={{ mt: 2 }}>
-              Get back to Course Outline
-            </Button>
-            <Button variant="outlined" onClick={() => localStorage.clear()} sx={{ mt: 2, ml: 2 }}>
-              Clear Cache (Debug)
-            </Button>
+            <Typography color="error" align="center">{audioError}</Typography>
+            <Button variant="contained" onClick={() => { setAudioError(null); navigate('/training'); }} sx={{ mt: 2 }}>Get back to Course Outline</Button>
+            <Button variant="outlined" onClick={() => localStorage.clear()} sx={{ mt: 2, ml: 2 }}>Clear Cache (Debug)</Button>
           </Box>
         ) : (
           <>
             {!match ? (
               <Grid container spacing={2}>
-                {modules.length > 0 ? (
-                  modules.map((module) => (
-                    <Grid
-                      item
-                      xs={12}
-                      sm={6}
-                      md={3}
-                      key={`module-${module.moduleId || module.title}`}
-                    >
-                      {module.moduleId ? (
-                        <MainCard
-                          title={`Lesson ${module.moduleId} - ${module.title || 'Untitled'}`}
-                          sx={{
-                            cursor: 'pointer',
-                            border: '1px solid',
-                            borderColor: theme.palette.divider,
-                            backgroundColor: '#fff',
-                            transition: 'background 0.2s',
-                            '&:hover': { backgroundColor: theme.palette.action.hover },
-                          }}
-                          onClick={() => handleModuleSelect(module.moduleId)}
-                        >
-                          <Typography variant="h6">{module.title || 'Untitled'}</Typography>
-                          <Typography>Duration: {formatTime(module.duration)}</Typography>
-                          <Typography>Watch Time: {formatTime(module.watchTime)}</Typography>
-                          <Typography>Status: {module.status || 'Not Started'}</Typography>
-                          {module.isComplete && (
-                            <Typography color="success.main">Completed!</Typography>
-                          )}
-                        </MainCard>
-                      ) : (
-                        <Typography color="error">Invalid module data</Typography>
-                      )}
-                    </Grid>
-                  ))
-                ) : (
+                {modules.length > 0 ? modules.map((module) => (
+                  <Grid item xs={12} sm={6} md={3} key={`module-${module.moduleId || module.title}`}>
+                    {module.moduleId ? (
+                      <MainCard
+                        title={`Lesson ${module.moduleId} - ${module.title || 'Untitled'}`}
+                        sx={{ cursor: 'pointer', border: '1px solid', borderColor: theme.palette.divider, backgroundColor: '#fff', transition: 'background 0.2s', '&:hover': { backgroundColor: theme.palette.action.hover } }}
+                        onClick={() => handleModuleSelect(module.moduleId)}
+                      >
+                        <Typography variant="h6">{module.title || 'Untitled'}</Typography>
+                        <Typography>Duration: {formatTime(module.duration)}</Typography>
+                        <Typography>Watch Time: {formatTime(module.watchTime)}</Typography>
+                        <Typography>Status: {module.status || 'Not Started'}</Typography>
+                        {module.isComplete && <Typography color="success.main">Completed!</Typography>}
+                      </MainCard>
+                    ) : <Typography color="error">Invalid module data</Typography>}
+                  </Grid>
+                )) : (
                   <>
                     <Box sx={{ width: '100%', mb: 2, textAlign: 'center' }}>
                       <CircularProgress color="primary" size={40} />
-                      <Typography variant="h6" sx={{ mt: 1, color: theme.palette.text.secondary }}>
-                        Preparing audio training lessons...
-                      </Typography>
+                      <Typography variant="h6" sx={{ mt: 1, color: theme.palette.text.secondary }}>Preparing audio training lessons...</Typography>
                     </Box>
                     <Grid container spacing={2}>
                       {Array.from({ length: 6 }).map((_, index) => (
                         <Grid item xs={12} sm={6} md={3} key={`skeleton-${index}`}>
-                          <Box
-                            sx={{
-                              p: 2,
-                              border: '1px solid',
-                              borderColor: theme.palette.divider,
-                              borderRadius: theme.shape.borderRadius,
-                              backgroundColor: theme.palette.background.paper,
-                              height: 150,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              justifyContent: 'space-between',
-                            }}
-                          >
+                          <Box sx={{ p: 2, border: '1px solid', borderColor: theme.palette.divider, borderRadius: theme.shape.borderRadius, backgroundColor: theme.palette.background.paper, height: 150, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                             <Skeleton variant="text" sx={{ fontSize: '1.2rem', mb: 1 }} />
                             <Skeleton variant="text" width="80%" />
                             <Skeleton variant="text" width="60%" />
@@ -596,111 +326,89 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                   </>
                 )}
               </Grid>
-            ) : (
-              selectedModule && (
-                <MainCard
-                  title={`Lesson ${selectedModule.moduleId} - ${selectedModule.title}`}
-                  sx={{
-                    width: '100%',
-                    maxWidth: '600px',
-                    [theme.breakpoints.down('sm')]: {
-                      maxWidth: '100%',
-                      padding: 1,
-                    },
+            ) : selectedModule && (
+              <MainCard
+                title={`Lesson ${selectedModule.moduleId} - ${selectedModule.title}`}
+                sx={{
+                  width: "100%",
+                  maxWidth: "600px",
+                  [theme.breakpoints.down("sm")]: { maxWidth: "100%", padding: 1 },
+                }}
+              >
+                <audio
+                  ref={audioRef}
+                  src={`https://brm-partners.britam.com${selectedModule.filePath}?v=${selectedModule.updateDate || Date.now()}`}
+                  onTimeUpdate={(e) => {
+                    const time = Math.floor((e.target as HTMLAudioElement).currentTime);
+                    setCurrentTime(time);
+                    console.log(`Listening at ${formatTime(time)}`);
                   }}
-                >
-                  <ReactH5AudioPlayer
-                    ref={audioRef}
-                    src={`https://brm-partners.britam.com${selectedModule.filePath}?v=${selectedModule.updateDate || Date.now()}`}
-                    listenInterval={1000}
-                    onLoadedMetadata={() => {
-                      // Set initial playback position from currentTime
-                      if (audioRef.current?.audio && currentTime > 0) {
-                        audioRef.current.audio.currentTime = currentTime;
-                      }
-                    }}
-                    onPlay={() => {
-                      console.log('Playing', audioRef.current?.audio);
-                      setInitialPlaybackTime(currentTime);
-                    }}
-                    onPause={() => {
-                      console.log('Pausing - using currentTime:', currentTime);
-                      if (audioRef.current?.audio && selectedModule && !selectedModule.isComplete) {
-                        const time = Math.floor(audioRef.current.audio.currentTime);
-                        setCurrentTime(time);
-                        updateProgress(selectedModule.moduleId, time);
-                      }
-                    }}
-                    onEnded={() => {
-                      if (selectedModule && !selectedModule.isComplete) {
-                        const fullDuration = selectedModule.duration;
-                        updateProgress(selectedModule.moduleId, fullDuration);
-                      }
-                    }}
-                    onListen={(e) => {
-                      console.log('onListen event:', e);
-                      if (e.target) {
-                        let time = e.target.currentTime || 0;
-                        time = Math.min(time, audioDuration || selectedModule.duration);
-                        setCurrentTime(Math.floor(time));
-                      }
-                    }}
-                    onError={(e) => {
-                      console.error('Audio error:', e);
-                      setAudioError('Failed to load audio file. Please try again later.');
-                    }}
-                    customAdditionalControls={[]}
-                    customVolumeControls={[]}
-                    customControlsSection={[
-                      'MAIN_CONTROLS',
-                      (
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: '10px',
-                            padding: '10px',
-                            flexWrap: 'wrap',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          {/* <IconButton onClick={handleRewind} color="primary">
-                            <FaUndo />
-                          </IconButton>
-                          <IconButton onClick={handleRestart} color="primary">
-                            <FaUndo style={{ transform: 'rotate(180deg)' }} />
-                          </IconButton> */}
-                          <Button variant="contained" onClick={handleClose} sx={{ mt: 1 }}>
-                            Close
-                          </Button>
-                        </div>
-                      ),
-                    ]}
-                    showJumpControls={false}
-                    showSkipControls={false}
-                    style={{ width: '100%' }}
-                  />
-                  <Box sx={{ p: 2, textAlign: 'center' }}>
-                    <Typography>Duration: {formatTime(selectedModule.duration)}</Typography>
-                    <Typography>
-                      Progress: {formatTime(currentTime)} / {formatTime(selectedModule.duration)}
-                    </Typography>
-                    <Typography>Status: {selectedModule.status}</Typography>
-                    {selectedModule.isComplete && (
-                      <Button
-                        variant="contained"
-                        startIcon={<FaArrowRight />}
-                        onClick={handleNextModule}
-                        disabled={
-                          modules.findIndex((m) => m.moduleId > selectedModule.moduleId && !m.isComplete) === -1
-                        }
-                        sx={{ mt: 2 }}
-                      >
-                        Next Module
-                      </Button>
-                    )}
-                  </Box>
-                </MainCard>
-              )
+                  onLoadedMetadata={(e) => {
+                    const audio = e.target as HTMLAudioElement;
+                    if (selectedModule.isComplete) {
+                      audio.currentTime = 0; // Start from beginning for relisten
+                      setCurrentTime(0);
+                    } else {
+                      audio.currentTime = currentTime;
+                    }
+                  }}
+                  onPlay={(e) => {
+                    const audio = e.target as HTMLAudioElement;
+                    if (selectedModule.isComplete) {
+                      audio.currentTime = 0; // Ensure start from beginning on play
+                      setCurrentTime(0);
+                      console.log('Relisten: Starting from beginning');
+                    } else {
+                      const time = audio.currentTime;
+                      if (initialPlaybackTime === 0) setInitialPlaybackTime(time);
+                      setCurrentTime(time);
+                      console.log(`Playing at ${formatTime(time)}`);
+                    }
+                  }}
+                  onPause={(e) => {
+                    const time = Math.floor((e.target as HTMLAudioElement).currentTime);
+                    if (selectedModule && !selectedModule.isComplete && !isUpdating) {
+                      setCurrentTime(time);
+                      updateProgress(selectedModule.moduleId, time);
+                      console.log(`Paused at ${formatTime(time)}`);
+                    }
+                  }}
+                  onEnded={() => {
+                    if (selectedModule && !selectedModule.isComplete) {
+                      updateProgress(selectedModule.moduleId, selectedModule.duration);
+                      console.log(`Ended at ${formatTime(selectedModule.duration)}`);
+                    }
+                  }}
+                  onError={(e) => {
+                    console.error("Audio error:", e);
+                    setAudioError("Failed to load audio file. Please try again later.");
+                  }}
+                  controls
+                  style={{ width: "100%", outline: "none" }}
+                  preload="auto"
+                />
+                <Box sx={{ p: 2, textAlign: "center" }}>
+                  <Button variant="contained" onClick={handleClose} sx={{ mt: 1 }}>
+                    Close
+                  </Button>
+                  <Typography>Duration: {formatTime(selectedModule.duration)}</Typography>
+                  <Typography>
+                    Progress: {formatTime(currentTime)} / {formatTime(selectedModule.duration)}
+                  </Typography>
+                  <Typography>Status: {selectedModule.status}</Typography>
+                  {selectedModule.isComplete && (
+                    <Button
+                      variant="contained"
+                      startIcon={<FaArrowRight />}
+                      onClick={handleNextModule}
+                      disabled={modules.findIndex(m => m.moduleId > selectedModule.moduleId && !m.isComplete) === -1}
+                      sx={{ mt: 2 }}
+                    >
+                      Next Module
+                    </Button>
+                  )}
+                </Box>
+              </MainCard>
             )}
           </>
         )}
@@ -709,8 +417,6 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   );
 };
 
-TrainingAudioCard.propTypes = {
-  isLoading: PropTypes.bool,
-};
+TrainingAudioCard.propTypes = { isLoading: PropTypes.bool };
 
 export default TrainingAudioCard;
