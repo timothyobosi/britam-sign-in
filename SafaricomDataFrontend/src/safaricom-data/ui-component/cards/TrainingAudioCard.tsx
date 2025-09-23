@@ -94,12 +94,16 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     if (navigator.onLine) {
       authApi.getAllTrainingModules(token, Number(agentId))
         .then((data) => {
-          console.log('Raw API data:', data);
-          const normalized = data.map((m) => ({
-            ...m,
-            duration: normalizeToSeconds(m.duration),
-            watchTime: Math.min(normalizeToSeconds(m.watchTime), normalizeToSeconds(m.duration)),
-          }));
+          const normalized = data.map((m) => {
+            const duration = normalizeToSeconds(m.duration);
+            const watchTime = normalizeToSeconds(m.watchTime);
+            return {
+              ...m,
+              duration,
+              watchTime: m.isComplete ? duration : Math.min(watchTime, duration),
+            };
+          });
+
           // localStorage.setItem('trainingModules_cache', JSON.stringify({ data: normalized, timestamp: Date.now() }));
           setModules(normalized.sort((a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)));
           setAudioError(null);
@@ -149,8 +153,9 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
             const normalizedModule = {
               ...module,
               duration,
-              watchTime: Math.min(watchTime, duration)
+              watchTime: module.isComplete ? duration : Math.min(watchTime, duration),
             };
+
             setSelectedModule(normalizedModule);
             setCurrentTime(normalizedModule.watchTime);
             console.log(`Fetched module ${id}, currentTime: ${formatTime(currentTime)}`)
@@ -264,23 +269,23 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
 
   const handleModuleSelect = (moduleId: number) => {
-  const module = modules.find((m) => m.moduleId === moduleId);
+    const module = modules.find((m) => m.moduleId === moduleId);
 
-  if (!module) return;
+    if (!module) return;
 
-  // check if any previous module is incomplete
-  const previousIncomplete = modules.some(
-    (m) => (m.sequence || m.moduleId) < (module.sequence || module.moduleId) && !m.isComplete
-  );
+    // check if any previous module is incomplete
+    const previousIncomplete = modules.some(
+      (m) => (m.sequence || m.moduleId) < (module.sequence || module.moduleId) && !m.isComplete
+    );
 
-  if (previousIncomplete) {
-    setDialogMessage("Kindly complete listening to the previous audio lessons.");
-    setOpenDialog(true);
-    return;
-  }
+    if (previousIncomplete) {
+      setDialogMessage("Kindly complete listening to the previous audio lessons.");
+      setOpenDialog(true);
+      return;
+    }
 
-  navigate(`/training/${moduleId}`);
-};
+    navigate(`/training/${moduleId}`);
+  };
 
 
   const handleClose = () => {
@@ -463,16 +468,16 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         )}
       </Box>
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
-  <DialogTitle>Notice</DialogTitle>
-  <DialogContent>
-    <Typography>{dialogMessage}</Typography>
-  </DialogContent>
-  <DialogActions>
-    <Button onClick={() => setOpenDialog(false)} autoFocus>
-      OK
-    </Button>
-  </DialogActions>
-</Dialog>
+        <DialogTitle>Notice</DialogTitle>
+        <DialogContent>
+          <Typography>{dialogMessage}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDialog(false)} autoFocus>
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </MainCard>
   );
