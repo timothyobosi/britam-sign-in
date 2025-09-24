@@ -9,6 +9,11 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import FormControl from '@mui/material/FormControl';
 import FormLabel from '@mui/material/FormLabel';
 import CircularProgress from '@mui/material/CircularProgress';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
 import MainCard from 'ui-component/cards/MainCard';
 import JWTContext from 'contexts/JWTContext';
 import * as authApi from 'safaricom-data/api/index';
@@ -23,7 +28,6 @@ const Analytics = () => {
     const agentId = user?.agentId;
     const token = localStorage.getItem('serviceToken');
 
-    // State with persistence from localStorage
     const [scores, setScores] = useState<any[]>(() => {
         try {
             const saved = localStorage.getItem('analytics_scores');
@@ -62,8 +66,11 @@ const Analytics = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [trainingModules, setTrainingModules] = useState<any[]>([]);
+    const [openDialog, setOpenDialog] = useState(false);
+    const [dialogMessage, setDialogMessage] = useState('');
+    const [redoModuleId, setRedoModuleId] = useState<number | null>(null);
 
-    // Persist state to localStorage whenever it changes
+
     useEffect(() => {
         try {
             localStorage.setItem('analytics_scores', JSON.stringify(scores));
@@ -100,7 +107,6 @@ const Analytics = () => {
         }
     }, [isSubmitted]);
 
-    // Fetch scores and training modules on mount or auth change
     useEffect(() => {
         if (agentId && token) {
             setIsLoading(true);
@@ -109,18 +115,35 @@ const Analytics = () => {
                     const modulesData = await authApi.getAllTrainingModules(token, Number(agentId));
                     setTrainingModules(modulesData);
 
-                    const scorePromises = [1, 2, 3, 4].map((moduleId) => authApi.getQuizScore(token, Number(agentId), moduleId));
+                    // Fetch each module score and tag with moduleId
+                    const scorePromises = modulesData.map(async (module) => {
+                        const rawScore = await authApi.getQuizScore(token, Number(agentId), module.moduleId);
+                        return { moduleId: module.moduleId, ...rawScore };
+                    });
+
                     const scoreData = await Promise.all(scorePromises);
-                    console.log('Fetched scores:', scoreData);
-                    setScores(scoreData);
+                    console.log('Fetched section scores:', scoreData);
+
+                    setScores(scoreData); // now has moduleId attached
+
                     const submittedState = scoreData.reduce(
-                        (acc: any, score: any, index: number) => ({
+                        (acc, score) => ({
                             ...acc,
-                            [index + 1]: score.answered === score.totalQuestions,
+                            [score.moduleId]: score.answered === score.totalQuestions && score.answered > 0,
                         }),
                         {}
                     );
                     setIsSubmitted(submittedState);
+
+                    // Store final score separately
+                    const finalScoreResp = await authApi.getFinalScore(token);
+                    setScores((prev) => [...prev, { moduleId: null, ...finalScoreResp }]);
+
+                    // ✅ FIX: reload questions if a section was open before refresh
+        if (selectedModule !== null) {
+            const data = await authApi.getQuizQuestions(token, selectedModule);
+            setQuestions(data);
+        }
                 } catch (err: any) {
                     console.error('Failed to fetch data:', err);
                     setError('Failed to fetch data: ' + err.message);
@@ -151,7 +174,13 @@ const Analytics = () => {
 
         setSelectedModule(moduleId);
         setQuestions([]);
-        setSelectedAnswers({});
+        setSelectedAnswers((prev) => {
+            const newAnswers = { ...prev };
+            questions.forEach((q) => {
+                if (newAnswers[q.questionid] && !isSubmitted[moduleId]) delete newAnswers[q.questionid];
+            });
+            return newAnswers;
+        });
         setIsLoading(true);
         try {
             if (!token) throw new Error('No valid token');
@@ -192,25 +221,27 @@ const Analytics = () => {
         try {
             const answers = questions.map((q) => ({
                 questionId: q.questionid,
-                selectedAnswer: selectedAnswers[q.questionid]
+                selectedAnswer: selectedAnswers[q.questionid],
             }));
             if (!token) throw new Error('No valid token');
             await authApi.submitQuizAnswers(token, Number(agentId), selectedModule, answers);
-            const updatedScores = await authApi.getQuizScore(token, Number(agentId), selectedModule);
-            console.log(`Updated scores for module ${selectedModule}:`, updatedScores);
+            const updatedScore = await authApi.getQuizScore(token, Number(agentId), selectedModule);
+            console.log(`Updated scores for module ${selectedModule}:`, updatedScore);
+            const finalScore = await authApi.getFinalScore(token);
 
-            // Update the specific module score
-            setScores((prev) =>
-                prev.map((score, index) => (index + 1 === selectedModule ? updatedScores : score))
-            );
+            setScores((prev) => {
+                const otherModules = prev.filter(
+                    (s) => s.moduleId !== selectedModule && s.moduleId !== null
+                );
 
-            // Mark as submitted
+                return [
+                    ...otherModules,
+                    { moduleId: selectedModule, ...updatedScore },
+                    { moduleId: null, ...finalScore }
+                ];
+            });
+
             setIsSubmitted((prev) => ({ ...prev, [selectedModule]: true }));
-
-            // Optionally refetch all scores to ensure consistency
-            const allScorePromises = [1, 2, 3, 4].map((moduleId) => authApi.getQuizScore(token, Number(agentId), moduleId));
-            const allScoreData = await Promise.all(allScorePromises);
-            setScores(allScoreData);
         } catch (err: any) {
             console.error('Failed to submit answers:', err);
             setError('Failed to submit answers: ' + err.message);
@@ -219,38 +250,44 @@ const Analytics = () => {
         }
     };
 
-    const handleRedoTest = () => {
-        setSelectedModule(null);
-        setSelectedAnswers({});
-        setIsSubmitted({});
-        localStorage.removeItem('analytics_selectedAnswers');
-        localStorage.removeItem('analytics_isSubmitted');
-        // Refetch scores after redo
-        if (agentId && token) {
-            setIsLoading(true);
-            const fetchData = async () => {
-                try {
-                    const scorePromises = [1, 2, 3, 4].map((moduleId) => authApi.getQuizScore(token, Number(agentId), moduleId));
-                    const scoreData = await Promise.all(scorePromises);
-                    setScores(scoreData);
-                    const submittedState = scoreData.reduce(
-                        (acc: any, score: any, index: number) => ({
-                            ...acc,
-                            [index + 1]: score.answered === score.totalQuestions,
-                        }),
-                        {}
-                    );
-                    setIsSubmitted(submittedState);
-                } catch (err: any) {
-                    console.error('Failed to fetch data after redo:', err);
-                    setError('Failed to fetch data after redo: ' + err.message);
-                } finally {
-                    setIsLoading(false);
-                }
-            };
-            fetchData();
-        }
+    const handleRedoModule = (moduleId: number) => {
+        if (!isSubmitted[moduleId] || scores.find((s) => s.moduleId === moduleId)?.scorePercent >= 70) return;
+
+        setRedoModuleId(moduleId);
+        setDialogMessage(`Are you sure you want to retake Section ${moduleId}? Your previous answers will be cleared.`);
+        setOpenDialog(true);
     };
+
+
+    const handleDialogClose = () => {
+        setOpenDialog(false);
+        setDialogMessage('');
+    };
+
+    const confirmRedoModule = async () => {
+        if (redoModuleId === null) return;
+
+        // reset state
+        setSelectedAnswers({});
+        setIsSubmitted((prev) => ({ ...prev, [redoModuleId]: false }));
+
+        // reload fresh questions for that section
+        try {
+            if (!token) throw new Error('No valid token');
+            const data = await authApi.getQuizQuestions(token, redoModuleId);
+            setQuestions(data);
+            setSelectedModule(redoModuleId); // immediately open section
+        } catch (err: any) {
+            console.error(`Failed to reload questions for module ${redoModuleId}:`, err);
+            setError('Failed to reload questions: ' + err.message);
+        }
+
+        // close dialog
+        setOpenDialog(false);
+        setDialogMessage('');
+        setRedoModuleId(null);
+    };
+
 
     if (error) return (
         <Box sx={{ textAlign: 'center' }}>
@@ -294,9 +331,9 @@ const Analytics = () => {
         </Box>
     );
 
-    const totalQuestions = scores.reduce((acc: number, s: any) => acc + (s?.totalQuestions || 0), 0);
-    const correctAnswers = scores.reduce((acc: number, s: any) => acc + (s?.correctAnswers || 0), 0);
-    const wrongAnswers = scores.reduce((acc: number, s: any) => acc + (s?.wrongAnswers || 0), 0);
+    const finalScore = scores.find((s) => s.moduleId === null) || {};
+    const totalQuestions = finalScore.totalQuestions || 0;
+    const correctAnswers = finalScore.correctAnswers || 0;
     const scorePercent = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
 
     return (
@@ -306,49 +343,61 @@ const Analytics = () => {
                     <Typography variant="h6">Final Score: {scorePercent}%</Typography>
                     <Typography>Total Questions: {totalQuestions}</Typography>
                     <Typography>Correct Answers: {correctAnswers}</Typography>
-                    <Button
-                        variant="contained"
-                        color={scorePercent < 70 ? 'error' : 'primary'}
-                        sx={{ mt: 2 }}
-                        onClick={handleRedoTest}
-                    >
-                        Redo Test
-                    </Button>
+                    {!trainingModules.every((m) => m.isComplete) && (
+                        <Chip
+                            label="To do Begin the Test, Finish Listening to all the audio lessons"
+                            color="warning"
+                            sx={{ mt: 2 }}
+                        />
+                    )}
                 </MainCard>
             </Grid>
             {selectedModule === null
-                ? [1, 2, 3, 4].map((moduleId) => (
-                    <Grid item xs={12} md={6} key={moduleId}>
-                        <MainCard title={`Section ${moduleId}`}>
-                            <Typography>Total Questions: {scores[moduleId - 1]?.totalQuestions || 0}</Typography>
-                            <Typography>Answered: {scores[moduleId - 1]?.answered || 0}</Typography>
-                            <Typography>Correct Answers: {scores[moduleId - 1]?.correctAnswers || 0}</Typography>
-                            <Typography>Score Percent: {scores[moduleId - 1]?.scorePercent || 0}%</Typography>
-                            <Button
-                                onClick={() => handleModuleClick(moduleId)}
-                                variant="contained"
-                                sx={{ mt: 2 }}
-                                disabled={!trainingModules.every((module) => module.isComplete)}
-                            >
-                                Open Questions
-                            </Button>
-                        </MainCard>
-                    </Grid>
-                ))
-                : <Grid item xs={12}>
-                    <Collapse in={true} timeout={500}>
-                        <MainCard title={`Section ${selectedModule}`}>
-                            <Typography>Total Questions: {scores[selectedModule - 1]?.totalQuestions || 0}</Typography>
-                            <Typography>Answered: {scores[selectedModule - 1]?.answered || 0}</Typography>
-                            <Typography>Correct Answers: {scores[selectedModule - 1]?.correctAnswers || 0}</Typography>
-                            <Typography>Score Percent: {scores[selectedModule - 1]?.scorePercent || 0}%</Typography>
-                            <Button onClick={() => handleModuleClick(selectedModule)} variant="contained" sx={{ mt: 2 }}>
-                                Close
-                            </Button>
-                            <Box sx={{ mt: 2 }}>
-                                <Grid container spacing={2}>
-                                    {questions.length > 0 ? (
-                                        questions.map((q) => (
+                ? trainingModules.map((module) => {
+                    const moduleScore = scores.find((s) => s.moduleId === module.moduleId);
+                    return (
+                        <Grid item xs={12} md={6} key={module.moduleId}>
+                            <MainCard title={`Section ${module.moduleId}`}>
+                                <Typography>Total Questions: {moduleScore?.totalQuestions || 0}</Typography>
+                                <Typography>Answered: {moduleScore?.answered || 0}</Typography>
+                                <Typography>Correct Answers: {moduleScore?.correctAnswers || 0}</Typography>
+                                <Typography>Score Percent: {moduleScore?.scorePercent || 0}%</Typography>
+                                <Button
+                                    onClick={() => handleModuleClick(module.moduleId)}
+                                    variant="contained"
+                                    sx={{ mt: 2 }}
+                                    disabled={!trainingModules.every((m) => m.isComplete)}
+                                >
+                                    Open Questions
+                                </Button>
+                                {moduleScore && isSubmitted[module.moduleId] && moduleScore.scorePercent < 70 && moduleScore.answered > 0 && (
+                                    <Button
+                                        variant="contained"
+                                        color="error"
+                                        sx={{ mt: 2, ml: 2 }}
+                                        onClick={() => handleRedoModule(module.moduleId)}
+                                    >
+                                        Redo Section
+                                    </Button>
+                                )}
+                            </MainCard>
+                        </Grid>
+                    );
+                })
+                : questions.length > 0 && (
+                    <Grid item xs={12}>
+                        <Collapse in={true} timeout={500}>
+                            <MainCard title={`Section ${selectedModule}`}>
+                                <Typography>Total Questions: {scores.find((s) => s.moduleId === selectedModule)?.totalQuestions || 0}</Typography>
+                                <Typography>Answered: {scores.find((s) => s.moduleId === selectedModule)?.answered || 0}</Typography>
+                                <Typography>Correct Answers: {scores.find((s) => s.moduleId === selectedModule)?.correctAnswers || 0}</Typography>
+                                <Typography>Score Percent: {scores.find((s) => s.moduleId === selectedModule)?.scorePercent || 0}%</Typography>
+                                <Button onClick={() => handleModuleClick(selectedModule)} variant="contained" sx={{ mt: 2 }}>
+                                    Close
+                                </Button>
+                                <Box sx={{ mt: 2 }}>
+                                    <Grid container spacing={2}>
+                                        {questions.map((q) => (
                                             <Grid item xs={12} key={q.questionid}>
                                                 <FormControl fullWidth sx={{ mb: 3 }}>
                                                     <FormLabel>{q.text}</FormLabel>
@@ -362,7 +411,7 @@ const Analytics = () => {
                                                                 value={opt.optionid}
                                                                 control={<Radio />}
                                                                 label={opt.text}
-                                                                disabled={isSubmitted[selectedModule]}
+                                                                disabled={isSubmitted[selectedModule!]}
                                                             />
                                                         ))}
                                                     </RadioGroup>
@@ -375,27 +424,40 @@ const Analytics = () => {
                                                     )}
                                                 </FormControl>
                                             </Grid>
-                                        ))
-                                    ) : <Typography>No questions available for this module.</Typography>}
-                                </Grid>
-                                {!isSubmitted[selectedModule] ? (
-                                    <Button
-                                        onClick={handleSubmitAll}
-                                        variant="contained"
-                                        sx={{ mt: 2 }}
-                                        disabled={questions.length !== Object.keys(selectedAnswers).length || questions.length === 0}
-                                    >
-                                        Submit All
-                                    </Button>
-                                ) : (
-                                    <Typography sx={{ mt: 2 }} color="success.main">
-                                        Completed! Score: {scores[selectedModule - 1]?.scorePercent}%
-                                    </Typography>
-                                )}
-                            </Box>
-                        </MainCard>
-                    </Collapse>
-                </Grid>}
+                                        ))}
+                                    </Grid>
+                                    {!isSubmitted[selectedModule] ? (
+                                        <Button
+                                            onClick={handleSubmitAll}
+                                            variant="contained"
+                                            sx={{ mt: 2 }}
+                                            disabled={questions.length !== Object.keys(selectedAnswers).length || questions.length === 0}
+                                        >
+                                            Submit All
+                                        </Button>
+                                    ) : (
+                                        <Typography sx={{ mt: 2 }} color="success.main">
+                                            Completed! Score: {scores.find((s) => s.moduleId === selectedModule)?.scorePercent || 0}%
+                                        </Typography>
+                                    )}
+                                </Box>
+                            </MainCard>
+                        </Collapse>
+                    </Grid>
+                )}
+            <Dialog open={openDialog} onClose={handleDialogClose}>
+                <DialogTitle>Retake Section</DialogTitle>
+                <DialogContent>
+                    <Typography>{dialogMessage}</Typography>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleDialogClose}>Cancel</Button>
+                    <Button onClick={confirmRedoModule} color="error" variant="contained">
+                        Retake
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
         </Grid>
     );
 };
