@@ -1,12 +1,11 @@
 import PropTypes from 'prop-types';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '@mui/material/styles';
-import { Box, Button, Grid, Typography, IconButton, CircularProgress, Skeleton, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Box, Button, Grid, Typography, IconButton, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import { FaUndo, FaArrowRight } from 'react-icons/fa';
 import { useNavigate, useLocation, useParams, useMatch } from 'react-router-dom';
 import MainCard from 'ui-component/cards/MainCard';
 import AudioCard from './AudioCard';
-import SkeletonTotalOrderCard from 'ui-component/cards/Skeleton/EarningCard';
 import ReactH5AudioPlayer from 'react-h5-audio-player';
 import 'react-h5-audio-player/lib/styles.css';
 import * as authApi from 'safaricom-data/api/index';
@@ -57,7 +56,6 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
                 : Math.min(Math.max(apiWatchTime, localWatchTime), duration),
             };
           });
-
         }
       }
     } catch (e) {
@@ -83,11 +81,8 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   const [initialPlaybackTime, setInitialPlaybackTime] = useState<number>(0);
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [isPollingDisabled, setIsPollingDisabled] = useState<boolean>(false);
-
-  //dialog states
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogMessage, setDialogMessage] = useState("");
-
 
   const formatTime = (seconds: number): string => {
     if (!seconds || isNaN(seconds)) return '0:00';
@@ -119,8 +114,6 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
             };
           });
 
-
-          // localStorage.setItem('trainingModules_cache', JSON.stringify({ data: normalized, timestamp: Date.now() }));
           setModules(normalized.sort((a, b) => (a.sequence || a.moduleId) - (b.sequence || b.moduleId)));
           setAudioError(null);
         })
@@ -192,37 +185,39 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
 
   // Polling for real-time updates
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (selectedModule && token && navigator.onLine && !isPollingDisabled) {
-      interval = setInterval(() => {
-        authApi.getTrainingById(token, selectedModule.moduleId)
-          .then((updatedModule) => {
-            const duration = normalizeToSeconds(updatedModule.duration);
-            const watchTime = normalizeToSeconds(updatedModule.watchTime);
-            const cappedWatchTime = Math.min(watchTime, duration);
-            if (cappedWatchTime > currentTime) {
-              setSelectedModule(prev => prev ? { ...prev, watchTime: cappedWatchTime, isComplete: updatedModule.isComplete } : null);
-              setModules(prev => prev.map(m => m.moduleId === updatedModule.moduleId ? { ...m, watchTime: cappedWatchTime, isComplete: updatedModule.isComplete } : m));
-            }
+  let interval: NodeJS.Timeout;
+  if (selectedModule && token && navigator.onLine && !isPollingDisabled) {
+    interval = setInterval(() => {
+      authApi.getTrainingById(token, selectedModule.moduleId)
+        .then((updatedModule) => {
+          const duration = normalizeToSeconds(updatedModule.duration);
+          const watchTime = normalizeToSeconds(updatedModule.watchTime);
+          const cappedWatchTime = Math.min(watchTime, duration);
+          // Only update if server watchTime is greater than currentTime
+          if (cappedWatchTime > currentTime) {
+            setSelectedModule(prev => prev ? { ...prev, watchTime: cappedWatchTime, isComplete: updatedModule.isComplete } : null);
+            setModules(prev => prev.map(m => m.moduleId === updatedModule.moduleId ? { ...m, watchTime: cappedWatchTime, isComplete: updatedModule.isComplete } : m));
             console.log(`Polled module ${selectedModule.moduleId}, watchTime: ${formatTime(cappedWatchTime)}, currentTime: ${formatTime(currentTime)}`);
-          })
-          .catch(err => {
-            console.error('Polling failed:', err);
-            if (err.response?.status === 500) {
-              setIsPollingDisabled(true);
-              console.log('Polling disabled due to repeated 500 errors');
-            }
-          });
-      }, 15000);
-    }
-    return () => clearInterval(interval);
-  }, [selectedModule, token, currentTime, isPollingDisabled]);
+          } else {
+            console.log(`Polled module ${selectedModule.moduleId}, no update needed, server watchTime: ${formatTime(cappedWatchTime)}, currentTime: ${formatTime(currentTime)}`);
+          }
+        })
+        .catch(err => {
+          console.error('Polling failed:', err);
+          if (err.response?.status === 500) {
+            setIsPollingDisabled(true);
+            console.log('Polling disabled due to repeated 500 errors');
+          }
+        });
+    }, 15000);
+  }
+  return () => clearInterval(interval);
+}, [selectedModule, token, currentTime, isPollingDisabled]);
 
   // Save progress to localStorage
   useEffect(() => {
     if (moduleId && selectedModule) {
       const cappedCurrentTime = Math.min(currentTime, selectedModule.duration);
-      // localStorage.setItem(`audioProgress_${moduleId}`, String(cappedCurrentTime));
       console.log(`Saved progress for ${moduleId}: ${formatTime(cappedCurrentTime)}`);
     }
   }, [currentTime, moduleId, selectedModule]);
@@ -243,14 +238,11 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   }, [moduleId, selectedModule, token]);
 
   // Update progress on server
- // ✅ ensure updateProgress just trusts the provided time
-const updateProgress = async (moduleId: number, watchedSeconds: number) => {
+  const updateProgress = async (moduleId: number, watchedSeconds: number) => {
   if (token && selectedModule && !isUpdating) {
     setIsUpdating(true);
     try {
-      // clamp progress so it never exceeds duration
       const newWatchTime = Math.min(watchedSeconds, selectedModule.duration);
-
       console.log(
         `Updating progress → moduleId=${moduleId}, watchedSeconds=${formatTime(
           watchedSeconds
@@ -264,9 +256,9 @@ const updateProgress = async (moduleId: number, watchedSeconds: number) => {
       );
       console.log("Update progress response:", response);
 
-      // ✅ mark complete locally if fully watched
       const isComplete = newWatchTime >= selectedModule.duration;
 
+      // Update selectedModule and modules only if the new watchTime is valid
       setSelectedModule((prev) =>
         prev?.moduleId === moduleId
           ? {
@@ -290,6 +282,9 @@ const updateProgress = async (moduleId: number, watchedSeconds: number) => {
             : m
         )
       );
+
+      // Save to localStorage to persist the latest progress
+      localStorage.setItem(`audioProgress_${moduleId}`, String(newWatchTime));
     } catch (error) {
       console.error("Error saving progress:", error);
       setAudioError("Failed to save progress");
@@ -299,13 +294,11 @@ const updateProgress = async (moduleId: number, watchedSeconds: number) => {
   }
 };
 
-
-  const handleModuleSelect = (moduleId: number) => {
+const handleModuleSelect = (moduleId: number) => {
     const module = modules.find((m) => m.moduleId === moduleId);
 
     if (!module) return;
 
-    // check if any previous module is incomplete
     const previousIncomplete = modules.some(
       (m) => (m.sequence || m.moduleId) < (module.sequence || module.moduleId) && !m.isComplete
     );
@@ -319,17 +312,22 @@ const updateProgress = async (moduleId: number, watchedSeconds: number) => {
     navigate(`/training/${moduleId}`);
   };
 
+const handleClose = () => {
+  if (selectedModule) {
+    const watchedSeconds = audioRef.current?.audio ? Math.floor(audioRef.current.audio.currentTime) : currentTime;
+    setSelectedModule(null); // Clear selected module immediately
+    navigate('/training');   // Navigate back immediately
 
-  const handleClose = () => {
-    if (selectedModule) {
-      const watchedSeconds = audioRef.current?.audio ? Math.floor(audioRef.current.audio.currentTime) : currentTime;
-      if (navigator.onLine && token && !selectedModule.isComplete) {
-        updateProgress(selectedModule.moduleId, watchedSeconds);
-      }
-      setSelectedModule(null);
-      navigate('/training');
+    // Trigger updateProgress in the background with the latest time
+    if (navigator.onLine && token && !selectedModule.isComplete) {
+      updateProgress(selectedModule.moduleId, watchedSeconds).catch((error) => {
+        console.error("Failed to save progress on close:", error);
+      });
     }
-  };
+    // Save to localStorage before navigating
+    localStorage.setItem(`audioProgress_${moduleId}`, String(watchedSeconds));
+  }
+};
 
   const handleRewind = () => {
     if (audioRef.current?.audio) {
@@ -354,7 +352,30 @@ const updateProgress = async (moduleId: number, watchedSeconds: number) => {
     }
   };
 
-  if (isLoading) return <SkeletonTotalOrderCard />;
+  if (isLoading) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '300px',
+          backgroundColor: theme.palette.grey[100],
+          borderRadius: theme.shape.borderRadius,
+          p: 3,
+        }}
+      >
+        <CircularProgress color="primary" size={60} thickness={4} />
+        <Typography variant="h5" sx={{ mt: 2, color: theme.palette.text.primary }}>
+          Loading Audio Lesson...
+        </Typography>
+        <Typography variant="body2" sx={{ mt: 1, color: theme.palette.text.secondary }}>
+          Please wait while we prepare your training content.
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
     <MainCard border={false} content={false} sx={{ minHeight: '300px', height: 'auto', maxWidth: '100%', overflow: 'visible', [theme.breakpoints.down('sm')]: { minHeight: '200px', padding: 1 } }}>
@@ -386,24 +407,24 @@ const updateProgress = async (moduleId: number, watchedSeconds: number) => {
                     ) : <Typography color="error">Invalid module data</Typography>}
                   </Grid>
                 )) : (
-                  <>
-                    <Box sx={{ width: '100%', mb: 2, textAlign: 'center' }}>
-                      <CircularProgress color="primary" size={40} />
-                      <Typography variant="h6" sx={{ mt: 1, color: theme.palette.text.secondary }}>Preparing audio training lessons...</Typography>
-                    </Box>
-                    <Grid container spacing={2}>
-                      {Array.from({ length: 6 }).map((_, index) => (
-                        <Grid item xs={12} sm={6} md={3} key={`skeleton-${index}`}>
-                          <Box sx={{ p: 2, border: '1px solid', borderColor: theme.palette.divider, borderRadius: theme.shape.borderRadius, backgroundColor: theme.palette.background.paper, height: 150, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                            <Skeleton variant="text" sx={{ fontSize: '1.2rem', mb: 1 }} />
-                            <Skeleton variant="text" width="80%" />
-                            <Skeleton variant="text" width="60%" />
-                            <Skeleton variant="rounded" width="40%" height={20} />
-                          </Box>
-                        </Grid>
-                      ))}
-                    </Grid>
-                  </>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '100%',
+                      minHeight: '300px',
+                    }}
+                  >
+                    <CircularProgress color="primary" size={60} thickness={4} />
+                    <Typography variant="h5" sx={{ mt: 2, color: theme.palette.text.primary }}>
+                      Preparing Audio Training Lessons...
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 1, color: theme.palette.text.secondary }}>
+                      Please wait while we fetch your course content.
+                    </Typography>
+                  </Box>
                 )}
               </Grid>
             ) : selectedModule && (
@@ -415,17 +436,12 @@ const updateProgress = async (moduleId: number, watchedSeconds: number) => {
                   [theme.breakpoints.down("sm")]: { maxWidth: "100%", padding: 1 },
                 }}
               >
-                {/* Native audio element */}
                 <audio
                   ref={audioRef as React.RefObject<HTMLAudioElement>}
-                  src={`https://brm-partners.britam.com${selectedModule.filePath}?v=${selectedModule.updateDate || Date.now()
-                    }`}
-                  // ✅ Use backend-provided watchTime to resume playback
+                  src={`https://brm-partners.britam.com${selectedModule.filePath}?v=${selectedModule.updateDate || Date.now()}`}
                   onLoadedMetadata={(e) => {
                     (e.target as HTMLAudioElement).currentTime = selectedModule.watchTime || 0;
-                    console.log(
-                      `⏮️ Resumed from saved watchTime: ${formatTime(selectedModule.watchTime)}`
-                    );
+                    console.log(`⏮️ Resumed from saved watchTime: ${formatTime(selectedModule.watchTime)}`);
                   }}
                   onTimeUpdate={(e) => {
                     const time = Math.floor((e.target as HTMLAudioElement).currentTime);
@@ -438,19 +454,18 @@ const updateProgress = async (moduleId: number, watchedSeconds: number) => {
                     console.log("🎯 Selected module:", selectedModule);
                   }}
                   onPause={(e) => {
-                    const time = Math.floor((e.target as HTMLAudioElement).currentTime);
-                    if (selectedModule && !selectedModule.isComplete && !isUpdating) {
-                      updateProgress(selectedModule.moduleId, time);
-                      console.log(`⏸️ Paused at ${formatTime(time)}`);
-                      console.log("🎯 Selected module:", selectedModule);
-                    }
-                  }}
+  const time = Math.floor((e.target as HTMLAudioElement).currentTime);
+  if (selectedModule && !selectedModule.isComplete && !isUpdating) {
+    updateProgress(selectedModule.moduleId, time);
+    setCurrentTime(time); // Sync currentTime with paused time
+    console.log(`⏸️ Paused at ${formatTime(time)}`);
+    console.log("🎯 Selected module:", selectedModule);
+  }
+}}
                   onEnded={() => {
                     if (selectedModule && !selectedModule.isComplete) {
                       updateProgress(selectedModule.moduleId, selectedModule.duration);
-                      console.log(
-                        `🏁 Ended at saved watchTime ${formatTime(selectedModule.watchTime)}`
-                      );
+                      console.log(`🏁 Ended at saved watchTime ${formatTime(selectedModule.watchTime)}`);
                       console.log("🎯 Selected module:", selectedModule);
                     }
                   }}
@@ -462,20 +477,13 @@ const updateProgress = async (moduleId: number, watchedSeconds: number) => {
                   controls
                   style={{ width: "100%", outline: "none" }}
                 />
-
-
-
-                {/* Extra controls (Close + Next Module button) */}
                 <Box sx={{ p: 2, textAlign: "center" }}>
                   <Button variant="contained" onClick={handleClose} sx={{ mt: 1 }}>
                     Close
                   </Button>
                   <Typography>Duration: {formatTime(selectedModule.duration)}</Typography>
                   <Typography>
-                    {/* watchTime */}
-
-                    Progress: {formatTime(selectedModule.watchTime)} /{" "}
-                    {formatTime(selectedModule.duration)}
+                    Progress: {formatTime(selectedModule.watchTime)} / {formatTime(selectedModule.duration)}
                   </Typography>
                   <Typography>Status: {selectedModule.status}</Typography>
                   {selectedModule.isComplete && (
@@ -510,7 +518,6 @@ const updateProgress = async (moduleId: number, watchedSeconds: number) => {
           </Button>
         </DialogActions>
       </Dialog>
-
     </MainCard>
   );
 };
