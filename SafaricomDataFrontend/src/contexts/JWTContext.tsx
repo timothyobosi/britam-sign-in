@@ -1,5 +1,7 @@
 import PropTypes from 'prop-types';
 import React, { createContext, useEffect, useReducer } from 'react';
+import { toast } from 'sonner';
+
 
 // third-party
 import { Chance } from 'chance';
@@ -120,31 +122,45 @@ export const JWTProvider = ({ children }) => {
         init();
     }, []);
 
-    const login = async (email: string, password: string) => {
-        try {
-            const response = await axios.post(`${BASE_URL}/login`, { email, password });
-            const { token, agentId, name, role } = response.data;
-            setSession(token);
-            const user = {
-                agentId,
-                name,
-                role,
-                email
-            };
-            console.log('Login successful, user:', user);
-            dispatch({
-                type: LOGIN,
-                payload: {
-                    isLoggedIn: true,
-                    user,
-                    isInitialized: true
-                }
-            });
-        } catch (err) {
-            console.error('Login failed:', err);
-            throw err;
-        }
+
+const login = async (email: string, password: string) => {
+  try {
+    const response = await axios.post(`${BASE_URL}/login`, { email, password });
+    const { token, agentId, name, role } = response.data;
+
+    setSession(token);
+
+    const user = {
+      agentId,
+      name,
+      role,
+      email,
     };
+
+    console.log('Login successful, user:', user);
+
+    dispatch({
+      type: LOGIN,
+      payload: {
+        isLoggedIn: true,
+        user,
+        isInitialized: true,
+      },
+    });
+ } catch (err: any) {
+  console.error("Login failed:", err);
+
+  const message =
+    err.response?.data?.message ||   // backend "message"
+    err.response?.data?.error ||     // sometimes "error"
+    err.message ||                   // JS/axios error
+    "Something went wrong. Please try again."; // fallback
+
+  toast.error(message);
+  throw err;
+}
+};
+
 
     const register = async (email: string, password: string, firstName: string, lastName: string) => {
         const id = chance.bb_pin();
