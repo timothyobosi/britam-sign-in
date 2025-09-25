@@ -140,9 +140,15 @@ export const JWTProvider = ({ children }) => {
                     isInitialized: true
                 }
             });
-        } catch (err) {
-            console.error('Login failed:', err);
-            throw err;
+        } catch (err: any) {
+            console.error('Login failed with error:', err);
+            let errorMessage = 'Login failed';
+            if (err.response && err.response.data && err.response.data.message) {
+                errorMessage = err.response.data.message; // Extract message from response if available
+            } else if (err.message) {
+                errorMessage = err.message;
+            }
+            throw new Error(errorMessage);
         }
     };
 

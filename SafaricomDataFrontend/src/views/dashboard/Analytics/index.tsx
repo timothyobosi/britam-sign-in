@@ -70,6 +70,55 @@ const Analytics = () => {
     const [dialogMessage, setDialogMessage] = useState('');
     const [redoModuleId, setRedoModuleId] = useState<number | null>(null);
 
+    const fetchData = async () => {
+        if (!agentId || !token) {
+            setError("No valid user or token found.");
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const modulesData = await authApi.getAllTrainingModules(token, Number(agentId));
+            setTrainingModules(modulesData);
+
+            // Fetch each module score and tag with moduleId
+            const scorePromises = modulesData.map(async (module) => {
+                const rawScore = await authApi.getQuizScore(token, Number(agentId), module.moduleId);
+                return { moduleId: module.moduleId, ...rawScore };
+            });
+
+            const scoreData = await Promise.all(scorePromises);
+            setScores(scoreData);
+
+            const submittedState = scoreData.reduce(
+                (acc, score) => ({
+                    ...acc,
+                    [score.moduleId]: score.answered === score.totalQuestions && score.answered > 0,
+                }),
+                {}
+            );
+            setIsSubmitted(submittedState);
+
+            // Store final score separately
+            const finalScoreResp = await authApi.getFinalScore(token);
+            setScores((prev) => [...prev, { moduleId: null, ...finalScoreResp }]);
+
+            // Reload questions if section was open before refresh
+            if (selectedModule !== null) {
+                const data = await authApi.getQuizQuestions(token, selectedModule);
+                setQuestions(data);
+            }
+
+            setError(null); // clear any previous error
+        } catch (err: any) {
+            console.error("Failed to fetch data:", err);
+            setError("Something went wrong. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+
 
     useEffect(() => {
         try {
@@ -108,54 +157,7 @@ const Analytics = () => {
     }, [isSubmitted]);
 
     useEffect(() => {
-        if (agentId && token) {
-            setIsLoading(true);
-            const fetchData = async () => {
-                try {
-                    const modulesData = await authApi.getAllTrainingModules(token, Number(agentId));
-                    setTrainingModules(modulesData);
-
-                    // Fetch each module score and tag with moduleId
-                    const scorePromises = modulesData.map(async (module) => {
-                        const rawScore = await authApi.getQuizScore(token, Number(agentId), module.moduleId);
-                        return { moduleId: module.moduleId, ...rawScore };
-                    });
-
-                    const scoreData = await Promise.all(scorePromises);
-                    console.log('Fetched section scores:', scoreData);
-
-                    setScores(scoreData); // now has moduleId attached
-
-                    const submittedState = scoreData.reduce(
-                        (acc, score) => ({
-                            ...acc,
-                            [score.moduleId]: score.answered === score.totalQuestions && score.answered > 0,
-                        }),
-                        {}
-                    );
-                    setIsSubmitted(submittedState);
-
-                    // Store final score separately
-                    const finalScoreResp = await authApi.getFinalScore(token);
-                    setScores((prev) => [...prev, { moduleId: null, ...finalScoreResp }]);
-
-                    // ✅ FIX: reload questions if a section was open before refresh
-        if (selectedModule !== null) {
-            const data = await authApi.getQuizQuestions(token, selectedModule);
-            setQuestions(data);
-        }
-                } catch (err: any) {
-                    console.error('Failed to fetch data:', err);
-                    setError('Failed to fetch data: ' + err.message);
-                } finally {
-                    setIsLoading(false);
-                }
-            };
-            fetchData();
-        } else {
-            setError('No valid user or token found.');
-            setIsLoading(false);
-        }
+        fetchData();
     }, [agentId, token]);
 
     const handleModuleClick = async (moduleId: number) => {
@@ -289,14 +291,7 @@ const Analytics = () => {
     };
 
 
-    if (error) return (
-        <Box sx={{ textAlign: 'center' }}>
-            <Typography color="error">{error}</Typography>
-            <Button variant="contained" onClick={() => setError(null)} sx={{ mt: 2 }}>
-                Clear Error
-            </Button>
-        </Box>
-    );
+
     if (isLoading) return (
         <Box sx={{ p: 3, textAlign: 'center', width: '100%' }}>
             <CircularProgress color="primary" size={60} />
@@ -343,6 +338,10 @@ const Analytics = () => {
                     <Typography variant="h6">Final Score: {scorePercent}%</Typography>
                     <Typography>Total Questions: {totalQuestions}</Typography>
                     <Typography>Correct Answers: {correctAnswers}</Typography>
+                    <Button onClick={fetchData} variant="outlined" sx={{ mt: 2, ml: 2 }}>
+                        Refresh Data
+                    </Button>
+
                     {!trainingModules.every((m) => m.isComplete) && (
                         <Chip
                             label="To do Begin the Test, Finish Listening to all the audio lessons"

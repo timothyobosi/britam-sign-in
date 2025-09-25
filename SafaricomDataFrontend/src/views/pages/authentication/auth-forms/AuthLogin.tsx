@@ -16,6 +16,8 @@ import InputAdornment from '@mui/material/InputAdornment';
 import InputLabel from '@mui/material/InputLabel';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Typography from '@mui/material/Typography';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 
 // third party
 import * as Yup from 'yup';
@@ -39,14 +41,23 @@ const JWTLogin = ({ loginProp, ...others }) => {
     const scriptedRef = useScriptRef();
 
     const [checked, setChecked] = React.useState(true);
-
     const [showPassword, setShowPassword] = React.useState(false);
+    const [snackbarOpen, setSnackbarOpen] = React.useState(false);
+    const [snackbarMessage, setSnackbarMessage] = React.useState('');
+
     const handleClickShowPassword = () => {
         setShowPassword(!showPassword);
     };
 
     const handleMouseDownPassword = (event) => {
         event.preventDefault();
+    };
+
+    const handleSnackbarClose = (event, reason) => {
+        if (reason === 'clickaway') {
+            return;
+        }
+        setSnackbarOpen(false);
     };
 
     return (
@@ -69,10 +80,12 @@ const JWTLogin = ({ loginProp, ...others }) => {
                         setSubmitting(false);
                     }
                 } catch (err) {
-                    console.error(err);
+                    console.error('Login error caught in Formik:', err);
                     if (scriptedRef.current) {
                         setStatus({ success: false });
-                        setErrors({ submit: err.message });
+                        setErrors({ submit: err.message || 'Login failed' });
+                        setSnackbarMessage(err.message || 'Incorrect email or password. Please try again.');
+                        setSnackbarOpen(true);
                         setSubmitting(false);
                     }
                 }
@@ -173,6 +186,11 @@ const JWTLogin = ({ loginProp, ...others }) => {
                             </Button>
                         </AnimateButton>
                     </Box>
+                    <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
+                        <Alert onClose={handleSnackbarClose} severity="error" sx={{ width: '100%' }}>
+                            {snackbarMessage}
+                        </Alert>
+                    </Snackbar>
                 </form>
             )}
         </Formik>
