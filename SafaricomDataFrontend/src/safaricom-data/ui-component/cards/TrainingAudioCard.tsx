@@ -283,16 +283,24 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         )
       );
 
-      // Save to localStorage to persist the latest progress
-      localStorage.setItem(`audioProgress_${moduleId}`, String(newWatchTime));
-    } catch (error) {
-      console.error("Error saving progress:", error);
-      setAudioError("Failed to save progress");
-    } finally {
-      setIsUpdating(false);
+        // Save to localStorage to persist the latest progress
+        localStorage.setItem(`audioProgress_${moduleId}`, String(newWatchTime));
+      } catch (error: any) {
+        console.error("Error saving progress:", error);
+
+        if (error?.response?.status === 401) {
+          // Token/session expired
+          setAudioError("Your session expired. Please log in again to continue.");
+        } else {
+          // Fallback for other errors
+          setAudioError("We couldn't save your progress. Please try again later.");
+        }
+      } finally {
+        setIsUpdating(false);
+      }
+
     }
-  }
-};
+  };
 
 const handleModuleSelect = (moduleId: number) => {
     const module = modules.find((m) => m.moduleId === moduleId);
@@ -381,12 +389,39 @@ const handleClose = () => {
     <MainCard border={false} content={false} sx={{ minHeight: '300px', height: 'auto', maxWidth: '100%', overflow: 'visible', [theme.breakpoints.down('sm')]: { minHeight: '200px', padding: 1 } }}>
       <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', backgroundColor: theme.palette.grey[100] }}>
         {audioError ? (
-          <Box sx={{ textAlign: 'center' }}>
-            <Typography color="error" align="center">{audioError}</Typography>
-            <Button variant="contained" onClick={() => { setAudioError(null); navigate('/training'); }} sx={{ mt: 2 }}>Get back to Course Outline</Button>
-            <Button variant="outlined" onClick={() => localStorage.clear()} sx={{ mt: 2, ml: 2 }}>Clear Cache (Debug)</Button>
-          </Box>
-        ) : (
+  <Box sx={{ textAlign: 'center' }}>
+    <Typography color="error" align="center" sx={{ mb: 2 }}>
+      {audioError}
+    </Typography>
+
+    {audioError.includes("session expired") ? (
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={() => navigate('/login')}
+        sx={{ mt: 1 }}
+      >
+        Log in Again
+      </Button>
+    ) : (
+      <Button
+        variant="contained"
+        onClick={() => { setAudioError(null); navigate('/training'); }}
+        sx={{ mt: 1 }}
+      >
+        Get back to Course Outline
+      </Button>
+    )}
+
+    {/* <Button
+      variant="outlined"
+      onClick={() => localStorage.clear()}
+      sx={{ mt: 1, ml: 2 }}
+    >
+      Clear Cache (Debug)
+    </Button> */}
+  </Box>
+) : (
           <>
             {!match ? (
               <Grid container spacing={2}>
