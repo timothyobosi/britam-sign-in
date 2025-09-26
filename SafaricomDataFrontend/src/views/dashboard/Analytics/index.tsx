@@ -70,7 +70,6 @@ const Analytics = () => {
     const [dialogMessage, setDialogMessage] = useState('');
     const [redoModuleId, setRedoModuleId] = useState<number | null>(null);
 
-
     useEffect(() => {
         try {
             localStorage.setItem('analytics_scores', JSON.stringify(scores));
@@ -139,11 +138,11 @@ const Analytics = () => {
                     const finalScoreResp = await authApi.getFinalScore(token);
                     setScores((prev) => [...prev, { moduleId: null, ...finalScoreResp }]);
 
-                    // ✅ FIX: reload questions if a section was open before refresh
-        if (selectedModule !== null) {
-            const data = await authApi.getQuizQuestions(token, selectedModule);
-            setQuestions(data);
-        }
+                    // Reload questions if a section was open before refresh
+                    if (selectedModule !== null) {
+                        const data = await authApi.getQuizQuestions(token, selectedModule);
+                        setQuestions(data);
+                    }
                 } catch (err: any) {
                     console.error('Failed to fetch data:', err);
                     setError('Failed to fetch data: ' + err.message);
@@ -258,7 +257,6 @@ const Analytics = () => {
         setOpenDialog(true);
     };
 
-
     const handleDialogClose = () => {
         setOpenDialog(false);
         setDialogMessage('');
@@ -267,27 +265,26 @@ const Analytics = () => {
     const confirmRedoModule = async () => {
         if (redoModuleId === null) return;
 
-        // reset state
+        // Reset state
         setSelectedAnswers({});
         setIsSubmitted((prev) => ({ ...prev, [redoModuleId]: false }));
 
-        // reload fresh questions for that section
+        // Reload fresh questions for that section
         try {
             if (!token) throw new Error('No valid token');
             const data = await authApi.getQuizQuestions(token, redoModuleId);
             setQuestions(data);
-            setSelectedModule(redoModuleId); // immediately open section
+            setSelectedModule(redoModuleId); // Immediately open section
         } catch (err: any) {
             console.error(`Failed to reload questions for module ${redoModuleId}:`, err);
             setError('Failed to reload questions: ' + err.message);
         }
 
-        // close dialog
+        // Close dialog
         setOpenDialog(false);
         setDialogMessage('');
         setRedoModuleId(null);
     };
-
 
     if (error) return (
         <Box sx={{ textAlign: 'center' }}>
@@ -353,37 +350,41 @@ const Analytics = () => {
                 </MainCard>
             </Grid>
             {selectedModule === null
-                ? trainingModules.map((module) => {
-                    const moduleScore = scores.find((s) => s.moduleId === module.moduleId);
-                    return (
-                        <Grid item xs={12} md={6} key={module.moduleId}>
-                            <MainCard title={`Section ${module.moduleId}`}>
-                                <Typography>Total Questions: {moduleScore?.totalQuestions || 0}</Typography>
-                                <Typography>Answered: {moduleScore?.answered || 0}</Typography>
-                                <Typography>Correct Answers: {moduleScore?.correctAnswers || 0}</Typography>
-                                <Typography>Score Percent: {moduleScore?.scorePercent || 0}%</Typography>
-                                <Button
-                                    onClick={() => handleModuleClick(module.moduleId)}
-                                    variant="contained"
-                                    sx={{ mt: 2 }}
-                                    disabled={!trainingModules.every((m) => m.isComplete)}
-                                >
-                                    Open Questions
-                                </Button>
-                                {moduleScore && isSubmitted[module.moduleId] && moduleScore.scorePercent < 70 && moduleScore.answered > 0 && (
+                ? trainingModules
+                    .map((module) => {
+                        const moduleScore = scores.find((s) => s.moduleId === module.moduleId);
+                        // Only render sections with totalQuestions > 0
+                        if (!moduleScore || moduleScore.totalQuestions === 0) return null;
+                        return (
+                            <Grid item xs={12} md={6} key={module.moduleId}>
+                                <MainCard title={`Section ${module.moduleId}`}>
+                                    <Typography>Total Questions: {moduleScore?.totalQuestions || 0}</Typography>
+                                    <Typography>Answered: {moduleScore?.answered || 0}</Typography>
+                                    <Typography>Correct Answers: {moduleScore?.correctAnswers || 0}</Typography>
+                                    <Typography>Score Percent: {moduleScore?.scorePercent || 0}%</Typography>
                                     <Button
+                                        onClick={() => handleModuleClick(module.moduleId)}
                                         variant="contained"
-                                        color="error"
-                                        sx={{ mt: 2, ml: 2 }}
-                                        onClick={() => handleRedoModule(module.moduleId)}
+                                        sx={{ mt: 2 }}
+                                        disabled={!trainingModules.every((m) => m.isComplete)}
                                     >
-                                        Redo Section
+                                        Open Questions
                                     </Button>
-                                )}
-                            </MainCard>
-                        </Grid>
-                    );
-                })
+                                    {moduleScore && isSubmitted[module.moduleId] && moduleScore.scorePercent < 70 && moduleScore.answered > 0 && (
+                                        <Button
+                                            variant="contained"
+                                            color="error"
+                                            sx={{ mt: 2, ml: 2 }}
+                                            onClick={() => handleRedoModule(module.moduleId)}
+                                        >
+                                            Redo Section
+                                        </Button>
+                                    )}
+                                </MainCard>
+                            </Grid>
+                        );
+                    })
+                    .filter(Boolean) // Remove null entries
                 : questions.length > 0 && (
                     <Grid item xs={12}>
                         <Collapse in={true} timeout={500}>
@@ -457,7 +458,6 @@ const Analytics = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-
         </Grid>
     );
 };

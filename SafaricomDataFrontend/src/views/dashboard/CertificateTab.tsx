@@ -9,7 +9,8 @@ const CertificateTab: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [certificateUrl, setCertificateUrl] = useState<string | null>(null);
-  const [openPopup, setOpenPopup] = useState(false); // New state for popup
+  const [openPopup, setOpenPopup] = useState(false); // Popup for failed score
+  const [openProcessingPopup, setOpenProcessingPopup] = useState(false); // New popup for certificate processing
 
   useEffect(() => {
     if (!token) return;
@@ -39,7 +40,12 @@ const CertificateTab: React.FC = () => {
       });
       if (!resMeta.ok) {
         const errorText = await resMeta.text();
-        throw new Error(`HTTP error! status: ${resMeta.status} - ${errorText}`);
+        if (resMeta.status === 400 && errorText.includes('No certificate found for the agent')) {
+          setOpenProcessingPopup(true); // Show processing dialog
+        } else {
+          throw new Error(`HTTP error! status: ${resMeta.status} - ${errorText}`);
+        }
+        return;
       }
       const meta = await resMeta.json();
       const certificateUrlFromApi = meta?.certificateUrl;
@@ -77,6 +83,10 @@ const CertificateTab: React.FC = () => {
     setOpenPopup(false);
   };
 
+  const handleCloseProcessingPopup = () => {
+    setOpenProcessingPopup(false);
+  };
+
   return (
     <MainCard title="My Certificate">
       {loading && <CircularProgress />}
@@ -106,11 +116,25 @@ const CertificateTab: React.FC = () => {
         <DialogTitle>Certificate Unavailable</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            You did not Meet the Passmark, Kindly redo the test.
+            You did not meet the pass mark. Kindly redo the test.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClosePopup} color="primary" autoFocus>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/* Popup for certificate processing */}
+      <Dialog open={openProcessingPopup} onClose={handleCloseProcessingPopup}>
+        <DialogTitle>Certificate Processing</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Kindly wait as we process your certificate.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseProcessingPopup} color="primary" autoFocus>
             Close
           </Button>
         </DialogActions>

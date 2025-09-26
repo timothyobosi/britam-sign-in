@@ -83,6 +83,8 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
   const [isPollingDisabled, setIsPollingDisabled] = useState<boolean>(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogMessage, setDialogMessage] = useState("");
+  const [errorDialogMessage, setErrorDialogMessage] = useState<string | null>(null);
+  const [isSessionExpired, setIsSessionExpired] = useState(false);
 
   const formatTime = (seconds: number): string => {
     if (!seconds || isNaN(seconds)) return '0:00';
@@ -171,7 +173,12 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
           })
           .catch((error) => {
             console.error('Error fetching module details:', error);
-            setAudioError(`Failed to load module ${id}: ${error.message}`);
+            if (error?.response?.status === 401) {
+              setErrorDialogMessage("Your session has expired. Please log in again.");
+              setIsSessionExpired(true);
+            } else {
+              setAudioError(`Failed to load module ${id}: ${error.message}`);
+            }
           })
           .finally(() => setIsLoading(false));
       }
@@ -207,6 +214,9 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
           if (err.response?.status === 500) {
             setIsPollingDisabled(true);
             console.log('Polling disabled due to repeated 500 errors');
+          } else if (err.response?.status === 401) {
+            setErrorDialogMessage("Your session has expired during polling. Please log in again.");
+            setIsSessionExpired(true);
           }
         });
     }, 15000);
@@ -289,11 +299,10 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
         console.error("Error saving progress:", error);
 
         if (error?.response?.status === 401) {
-          // Token/session expired
-          setAudioError("Your session expired. Please log in again to continue.");
+          setErrorDialogMessage("Your session has expired. Your progress has been saved locally and will be synced when you log in again.");
+          setIsSessionExpired(true);
         } else {
-          // Fallback for other errors
-          setAudioError("We couldn't save your progress. Please try again later.");
+          setErrorDialogMessage("We couldn't save your progress right now. It has been saved locally and will sync later. Please check your internet connection.");
         }
       } finally {
         setIsUpdating(false);
@@ -360,6 +369,19 @@ const handleClose = () => {
     }
   };
 
+  const handleRetryProgress = () => {
+    if (selectedModule) {
+      const watchedSeconds = audioRef.current?.audio ? Math.floor(audioRef.current.audio.currentTime) : currentTime;
+      updateProgress(selectedModule.moduleId, watchedSeconds);
+      setErrorDialogMessage(null);
+    }
+  };
+
+  const handleLoginRedirect = () => {
+    localStorage.removeItem('serviceToken');
+    navigate('/login');
+  };
+
   if (isLoading) {
     return (
       <Box
@@ -412,14 +434,6 @@ const handleClose = () => {
         Get back to Course Outline
       </Button>
     )}
-
-    {/* <Button
-      variant="outlined"
-      onClick={() => localStorage.clear()}
-      sx={{ mt: 1, ml: 2 }}
-    >
-      Clear Cache (Debug)
-    </Button> */}
   </Box>
 ) : (
           <>
@@ -506,7 +520,7 @@ const handleClose = () => {
                   }}
                   onError={(e) => {
                     console.error("Audio error:", e);
-                    setAudioError("Failed to load audio file. Please try again later.");
+                    setErrorDialogMessage("Failed to load the audio file. Please check your connection and try again.");
                     console.log("🎯 Selected module:", selectedModule);
                   }}
                   controls
@@ -551,6 +565,28 @@ const handleClose = () => {
           <Button onClick={() => setOpenDialog(false)} autoFocus>
             OK
           </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={!!errorDialogMessage} onClose={() => setErrorDialogMessage(null)}>
+        <DialogTitle>{isSessionExpired ? 'Session Expired' : 'Progress Save Issue'}</DialogTitle>
+        <DialogContent>
+          <Typography>{errorDialogMessage}</Typography>
+        </DialogContent>
+        <DialogActions>
+          {isSessionExpired ? (
+            <Button onClick={handleLoginRedirect} color="primary" variant="contained">
+              Log In Again
+            </Button>
+          ) : (
+            <>
+              <Button onClick={handleRetryProgress} color="primary">
+                Retry
+              </Button>
+              <Button onClick={() => setErrorDialogMessage(null)} color="secondary">
+                Close
+              </Button>
+            </>
+          )}
         </DialogActions>
       </Dialog>
     </MainCard>
