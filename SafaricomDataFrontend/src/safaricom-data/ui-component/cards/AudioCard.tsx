@@ -3,6 +3,12 @@ import PropTypes from "prop-types";
 import { Box, Button, Typography } from "@mui/material";
 import { FaArrowRight } from "react-icons/fa";
 import MainCard from 'ui-component/cards/MainCard';
+import { useParams } from "react-router";
+
+import JWTContext from 'contexts/JWTContext';
+import { getTrainingById } from "safaricom-data/api";
+
+ // assuming you store token in context
 
 // Example helper for formatting
 const formatTime = (seconds: number) => {
@@ -12,32 +18,53 @@ const formatTime = (seconds: number) => {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 };
 
-const AudioCard = ({ isLoading }) => {
+const AudioCard = ({  }) => {
   const [modules, setModules] = useState<any[]>([]);
   const [selectedModule, setSelectedModule] = useState<any | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [initialPlaybackTime, setInitialPlaybackTime] = useState(0);
   const [isUpdating, setIsUpdating] = useState(false);
   const [audioError, setAudioError] = useState("");
+  const { id } = useParams<{ id: string }>();
+  const [isLoading, setIsLoading] = useState(true); // ✅ start loading
+  const jwtContext = React.useContext(JWTContext);
+  const token = localStorage.getItem('serviceToken');
+
+
 
   const audioRef = useRef<HTMLAudioElement>(null);
-
-  // ✅ Fetch modules only once when component mounts
-  useEffect(() => {
-    const fetchModules = async () => {
-      try {
-        const res = await fetch("/api/modules"); // <-- your endpoint
-        const data = await res.json();
-        setModules(data);
-        setSelectedModule(data[0]); // pick first by default
-      } catch (err) {
-        console.error("Failed to fetch modules:", err);
-        setAudioError("Could not load training modules.");
+useEffect(() => {
+  const fetchModule = async () => {
+    try {
+      if (!id) {
+        console.warn("No id from useParams");
+        return;
       }
-    };
 
-    fetchModules();
-  }, []); // Empty array → fetch runs only once
+      console.log("Fetching module id:", id, "with token:", token);
+
+      const module = await getTrainingById(token as string, Number(id));
+      console.log("Fetched module:", module.data);
+
+      setModules([module]);
+      setSelectedModule(module);
+    } catch (err) {
+      console.error("Failed to fetch module:", err);
+      setAudioError("Could not load training module.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  fetchModule();
+}, [id, token]);
+
+
+  // --- UI states ---
+  if (isLoading) return <Typography>Loading...</Typography>;
+  if (audioError) return <Typography color="error">{audioError}</Typography>;
+  if (!selectedModule) return <Typography>No training modules available.</Typography>;
+
 
   // Fake progress update function (replace with real API call)
   const updateProgress = async (moduleId: number, time: number) => {
@@ -69,9 +96,7 @@ const AudioCard = ({ isLoading }) => {
     }
   };
 
-  if (isLoading || !selectedModule) {
-    return <Typography>Loading...</Typography>;
-  }
+ 
 
   return (
     <MainCard>
@@ -122,7 +147,7 @@ const AudioCard = ({ isLoading }) => {
         <Button variant="contained" onClick={handleClose} sx={{ mt: 1 }}>
           Close
         </Button>
-        <Typography>Duration: {formatTime(selectedModule.duration)}</Typography>
+        <Typography>Durationhhhhhhhhhhhhhhhhhhhhh: {formatTime(selectedModule.duration)}</Typography>
         <Typography>
           Progress: {formatTime(currentTime)} /{" "}
           {formatTime(selectedModule.duration)}

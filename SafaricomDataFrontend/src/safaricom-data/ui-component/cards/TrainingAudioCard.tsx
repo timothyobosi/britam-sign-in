@@ -190,39 +190,39 @@ const TrainingAudioCard: React.FC<TrainingAudioCardProps> = ({ isLoading: propLo
     }
   }, [moduleId, token, match]);
 
-  // Polling for real-time updates
-  useEffect(() => {
-  let interval: NodeJS.Timeout;
-  if (selectedModule && token && navigator.onLine && !isPollingDisabled) {
-    interval = setInterval(() => {
-      authApi.getTrainingById(token, selectedModule.moduleId)
-        .then((updatedModule) => {
-          const duration = normalizeToSeconds(updatedModule.duration);
-          const watchTime = normalizeToSeconds(updatedModule.watchTime);
-          const cappedWatchTime = Math.min(watchTime, duration);
-          // Only update if server watchTime is greater than currentTime
-          if (cappedWatchTime > currentTime) {
-            setSelectedModule(prev => prev ? { ...prev, watchTime: cappedWatchTime, isComplete: updatedModule.isComplete } : null);
-            setModules(prev => prev.map(m => m.moduleId === updatedModule.moduleId ? { ...m, watchTime: cappedWatchTime, isComplete: updatedModule.isComplete } : m));
-            console.log(`Polled module ${selectedModule.moduleId}, watchTime: ${formatTime(cappedWatchTime)}, currentTime: ${formatTime(currentTime)}`);
-          } else {
-            console.log(`Polled module ${selectedModule.moduleId}, no update needed, server watchTime: ${formatTime(cappedWatchTime)}, currentTime: ${formatTime(currentTime)}`);
-          }
-        })
-        .catch(err => {
-          console.error('Polling failed:', err);
-          if (err.response?.status === 500) {
-            setIsPollingDisabled(true);
-            console.log('Polling disabled due to repeated 500 errors');
-          } else if (err.response?.status === 401) {
-            setErrorDialogMessage("Your session has expired during polling. Please log in again.");
-            setIsSessionExpired(true);
-          }
-        });
-    }, 15000);
-  }
-  return () => clearInterval(interval);
-}, [selectedModule, token, currentTime, isPollingDisabled]);
+//   // Polling for real-time updates
+//   useEffect(() => {
+//   let interval: NodeJS.Timeout;
+//   if (selectedModule && token && navigator.onLine && !isPollingDisabled) {
+//     interval = setInterval(() => {
+//       authApi.getTrainingById(token, selectedModule.moduleId)
+//         .then((updatedModule) => {
+//           const duration = normalizeToSeconds(updatedModule.duration);
+//           const watchTime = normalizeToSeconds(updatedModule.watchTime);
+//           const cappedWatchTime = Math.min(watchTime, duration);
+//           // Only update if server watchTime is greater than currentTime
+//           if (cappedWatchTime > currentTime) {
+//             setSelectedModule(prev => prev ? { ...prev, watchTime: cappedWatchTime, isComplete: updatedModule.isComplete } : null);
+//             setModules(prev => prev.map(m => m.moduleId === updatedModule.moduleId ? { ...m, watchTime: cappedWatchTime, isComplete: updatedModule.isComplete } : m));
+//             console.log(`Polled module ${selectedModule.moduleId}, watchTime: ${formatTime(cappedWatchTime)}, currentTime: ${formatTime(currentTime)}`);
+//           } else {
+//             console.log(`Polled module ${selectedModule.moduleId}, no update needed, server watchTime: ${formatTime(cappedWatchTime)}, currentTime: ${formatTime(currentTime)}`);
+//           }
+//         })
+//         .catch(err => {
+//           console.error('Polling failed:', err);
+//           if (err.response?.status === 500) {
+//             setIsPollingDisabled(true);
+//             console.log('Polling disabled due to repeated 500 errors');
+//           } else if (err.response?.status === 401) {
+//             setErrorDialogMessage("Your session has expired during polling. Please log in again.");
+//             setIsSessionExpired(true);
+//           }
+//         });
+//     }, 15000);
+//   }
+//   return () => clearInterval(interval);
+// }, [selectedModule, token, currentTime, isPollingDisabled]);
 
   // Save progress to localStorage
   useEffect(() => {
