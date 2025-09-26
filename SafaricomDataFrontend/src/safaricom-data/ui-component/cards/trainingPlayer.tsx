@@ -1,3 +1,4 @@
+// File: src/safaricom-data/ui-component/cards/TrainingPlayer.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '@mui/material/styles';
 import { Box, Button, Typography, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
@@ -6,6 +7,7 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import MainCard from 'ui-component/cards/MainCard';
 import * as authApi from 'safaricom-data/api/index';
 import JWTContext from 'contexts/JWTContext';
+import { toast } from 'sonner';
 
 // Normalize time to seconds with better error handling
 const normalizeToSeconds = (value: any): number => {
@@ -49,6 +51,7 @@ const TrainingPlayer: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [errorDialogMessage, setErrorDialogMessage] = useState<string | null>(null);
   const [isSessionExpired, setIsSessionExpired] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // New state for saving feedback
 
   // Fetch selected module if not provided in state
   useEffect(() => {
@@ -67,7 +70,7 @@ const TrainingPlayer: React.FC = () => {
           };
           setSelectedModule(normalizedModule);
           setCurrentTime(normalizedModule.watchTime);
-          console.log(`Fetched module ${id}, currentTime: ${formatTime(currentTime)}`)
+          console.log(`Fetched module ${id}, currentTime: ${formatTime(currentTime)}`);
         })
         .catch((error) => {
           console.error('Error fetching module details:', error);
@@ -111,7 +114,7 @@ const TrainingPlayer: React.FC = () => {
       if (audioRef.current && selectedModule) {
         const time = Math.floor(audioRef.current.currentTime);
         if (navigator.onLine && token && !selectedModule.isComplete) {
-          authApi.updateTrainingProgress(token, selectedModule.moduleId, time).catch((err) => console.error('Failed to save progress on unload:', err));
+          updateProgress(selectedModule.moduleId, time).catch((err) => console.error('Failed to save progress on unload:', err));
         }
       }
     };
@@ -137,30 +140,20 @@ const TrainingPlayer: React.FC = () => {
         );
         console.log("Update progress response:", response);
 
-        const isComplete = newWatchTime >= selectedModule.duration;
+        const isComplete = newWatchTime >= selectedModule.duration; // Set to true when watchTime equals duration
 
         // Update selectedModule and modules
-        setSelectedModule((prev) =>
-          prev?.moduleId === moduleId
-            ? {
-                ...prev,
-                watchTime: newWatchTime,
-                isComplete,
-                status: isComplete ? "Completed" : "In Progress",
-              }
-            : prev
-        );
+        const updatedModule = {
+          ...selectedModule,
+          watchTime: newWatchTime,
+          isComplete,
+          status: isComplete ? "Completed" : "In Progress",
+        };
+        setSelectedModule(updatedModule);
 
         setModules((prev) =>
           prev.map((m) =>
-            m.moduleId === moduleId
-              ? {
-                  ...m,
-                  watchTime: newWatchTime,
-                  isComplete,
-                  status: isComplete ? "Completed" : "In Progress",
-                }
-              : m
+            m.moduleId === moduleId ? updatedModule : m
           )
         );
       } catch (error: any) {
@@ -177,17 +170,28 @@ const TrainingPlayer: React.FC = () => {
     }
   };
 
-  const handleClose = () => {
-    if (selectedModule) {
-      const watchedSeconds = audioRef.current ? Math.floor(audioRef.current.currentTime) : currentTime;
-      if (navigator.onLine && token && !selectedModule.isComplete) {
-        updateProgress(selectedModule.moduleId, watchedSeconds).catch((error) => {
-          console.error("Failed to save progress on close:", error);
-        });
+const handleClose = async () => {
+  if (selectedModule) {
+    const watchedSeconds = audioRef.current
+      ? Math.floor(audioRef.current.currentTime)
+      : currentTime;
+
+    if (navigator.onLine && token && !selectedModule.isComplete) {
+      setIsSaving(true);
+      try {
+        await updateProgress(selectedModule.moduleId, watchedSeconds);
+        toast.success("Progress saved successfully!");
+      } catch (error) {
+        console.error("Failed to save progress on close:", error);
+        toast.error("Failed to save progress. Please try again.");
+      } finally {
+        setIsSaving(false);
       }
-      navigate('/training');
     }
-  };
+    navigate("/training");
+  }
+};
+
 
   const handleNextModule = () => {
     if (selectedModule && modules.length > 0) {
@@ -279,10 +283,12 @@ const TrainingPlayer: React.FC = () => {
               src={`https://brm-partners.britam.com${selectedModule.filePath}?v=${selectedModule.updateDate || Date.now()}`}
               onLoadedMetadata={(e) => {
                 e.currentTarget.currentTime = selectedModule.watchTime || 0;
+                setCurrentTime(selectedModule.watchTime || 0);
                 console.log(`⏮️ Resumed from saved watchTime: ${formatTime(selectedModule.watchTime)}`);
               }}
               onTimeUpdate={(e) => {
                 const time = Math.floor(e.currentTarget.currentTime);
+                setCurrentTime(time); // Update currentTime as the user seeks or plays
                 console.log(`Listening at ${formatTime(time)}`);
                 console.log("🎯 Selected module:", selectedModule);
               }}
@@ -321,10 +327,10 @@ const TrainingPlayer: React.FC = () => {
               </Button>
               <Typography>Duration: {formatTime(selectedModule.duration)}</Typography>
               <Typography>
-                Progress: {formatTime(selectedModule.watchTime)} / {formatTime(selectedModule.duration)}
+                Progress: {formatTime(currentTime)} / {formatTime(selectedModule.duration)}
               </Typography>
               <Typography>Status: {selectedModule.status}</Typography>
-              {selectedModule.isComplete && (
+              {/* {selectedModule.isComplete && (
                 <Button
                   variant="contained"
                   startIcon={<FaArrowRight />}
@@ -338,6 +344,12 @@ const TrainingPlayer: React.FC = () => {
                 >
                   Next Module
                 </Button>
+              )} */}
+              {isSaving && (
+                <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CircularProgress size={24} sx={{ mr: 1 }} />
+                  <Typography>Saving your progress...</Typography>
+                </Box>
               )}
             </Box>
           </MainCard>
