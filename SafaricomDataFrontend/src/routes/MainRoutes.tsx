@@ -10,6 +10,8 @@ import AuthGuard from 'utils/route-guard/AuthGuard';
 import TrainingAudioCard from 'safaricom-data/ui-component/cards/TrainingAudioCard';
 
 import { loader as productsLoader, productLoader } from 'api/products';
+import TrainingList from 'safaricom-data/ui-component/cards/TrainingList';
+import TrainingPlayer from 'safaricom-data/ui-component/cards/trainingPlayer';
 
 // dashboard routing
 const DashboardDefault = Loadable(lazy(() => import('views/dashboard/Default')));
@@ -47,6 +49,15 @@ const MainRoutes = {
         {
             path: '/training/:moduleId', // Route for individual module views
             element: <TrainingAudioCard isLoading={false} />
+        },
+        // Training module routes
+        {
+            path: '/training', // Route for the modules list
+            element: <TrainingList />
+        },
+        {
+            path: '/training/:moduleId', // Route for individual module views
+            element: <TrainingPlayer />
         }
     ]
 };
