@@ -16,16 +16,48 @@ export async function getFinalScore(token: string): Promise<any> {
 }
 
 export async function getCertificate(token: string): Promise<Blob> {
-    const res = await fetch(`${QUIZ_BASE_URL}/get-certificate`, {
+    const apiBase = import.meta.env.VITE_API_TARGET || '';
+    
+    // Step 1: Fetch certificate metadata
+    const resMeta = await fetch(`${QUIZ_BASE_URL}/get-certificate`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
+        },
+    });
+    
+    if (!resMeta.ok) {
+        const errorText = await resMeta.text();
+        if (resMeta.status === 400 && errorText.includes('No certificate found for the agent')) {
+            throw new Error('No certificate found for the agent');
+        }
+        throw new Error(`HTTP error! status: ${resMeta.status} - ${errorText}`);
+    }
+    
+    const meta = await resMeta.json();
+    const certificateUrlFromApi = meta?.certificateUrl;
+    if (!certificateUrlFromApi) throw new Error('Certificate URL not found in metadata');
+    
+    // Step 2: Construct full URL and fetch the PDF blob
+    const fullUrl = certificateUrlFromApi.startsWith('http') ? certificateUrlFromApi : `${apiBase}${certificateUrlFromApi}`;
+    
+    const resPdf = await fetch(fullUrl, {
         method: 'GET',
         headers: {
             'Authorization': `Bearer ${token}`,
             'Accept': '*/*',
-            'Cache-Control': 'no-cache', // Prevent caching
+            'Cache-Control': 'no-cache',
         },
     });
-    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    return res.blob();
+    
+    if (!resPdf.ok) {
+        const errorText = await resPdf.text();
+        throw new Error(`Failed to fetch PDF: HTTP error! status: ${resPdf.status} - ${errorText}`);
+    }
+    
+    return resPdf.blob();
 }
 
 export async function getQuizQuestions(token: string, moduleId: number): Promise<QuizQuestion[]> {

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Typography, CircularProgress, Box, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 import MainCard from 'ui-component/cards/MainCard';
-import { getFinalScore } from 'safaricom-data/api/index';
+import { getFinalScore, getCertificate } from 'safaricom-data/api/index';
 
 const CertificateTab: React.FC = () => {
   const token = localStorage.getItem('serviceToken');
@@ -10,7 +10,7 @@ const CertificateTab: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [certificateUrl, setCertificateUrl] = useState<string | null>(null);
   const [openPopup, setOpenPopup] = useState(false); // Popup for failed score
-  const [openProcessingPopup, setOpenProcessingPopup] = useState(false); // New popup for certificate processing
+  const [openProcessingPopup, setOpenProcessingPopup] = useState(false); // Popup for certificate processing
 
   useEffect(() => {
     if (!token) return;
@@ -30,39 +30,7 @@ const CertificateTab: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const apiBase = import.meta.env.VITE_API_TARGET || '';
-      const resMeta = await fetch(`${apiBase}/api/Quiz/get-certificate`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-      });
-      if (!resMeta.ok) {
-        const errorText = await resMeta.text();
-        if (resMeta.status === 400 && errorText.includes('No certificate found for the agent')) {
-          setOpenProcessingPopup(true); // Show processing dialog
-        } else {
-          throw new Error(`HTTP error! status: ${resMeta.status} - ${errorText}`);
-        }
-        return;
-      }
-      const meta = await resMeta.json();
-      const certificateUrlFromApi = meta?.certificateUrl;
-      if (!certificateUrlFromApi) throw new Error('Certificate URL not found');
-      const fullUrl = certificateUrlFromApi.startsWith('http') ? certificateUrlFromApi : `${apiBase}${certificateUrlFromApi}`;
-      const resPdf = await fetch(fullUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': '*/*',
-        },
-      });
-      if (!resPdf.ok) {
-        const errorText = await resPdf.text();
-        throw new Error(`HTTP error! status: ${resPdf.status} - ${errorText}`);
-      }
-      const blob = await resPdf.blob();
+      const blob = await getCertificate(token);
       const url = window.URL.createObjectURL(blob);
       setCertificateUrl(url);
       const link = document.createElement('a');
@@ -73,7 +41,11 @@ const CertificateTab: React.FC = () => {
       document.body.removeChild(link);
     } catch (err: any) {
       console.error('Certificate fetch error:', err);
-      setError('Failed to fetch certificate: ' + err.message);
+      if (err.message.includes('No certificate found for the agent')) {
+        setOpenProcessingPopup(true);
+      } else {
+        setError('Failed to fetch certificate: ' + err.message);
+      }
     } finally {
       setLoading(false);
     }
