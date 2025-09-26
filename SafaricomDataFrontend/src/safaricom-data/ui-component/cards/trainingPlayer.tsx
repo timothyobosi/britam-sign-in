@@ -1,4 +1,3 @@
-// File: src/safaricom-data/ui-component/cards/TrainingPlayer.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '@mui/material/styles';
 import { Box, Button, Typography, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
@@ -51,7 +50,7 @@ const TrainingPlayer: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [errorDialogMessage, setErrorDialogMessage] = useState<string | null>(null);
   const [isSessionExpired, setIsSessionExpired] = useState(false);
-  const [isSaving, setIsSaving] = useState(false); // New state for saving feedback
+  const [isSaving, setIsSaving] = useState(false);
 
   // Fetch selected module if not provided in state
   useEffect(() => {
@@ -140,9 +139,8 @@ const TrainingPlayer: React.FC = () => {
         );
         console.log("Update progress response:", response);
 
-        const isComplete = newWatchTime >= selectedModule.duration; // Set to true when watchTime equals duration
+        const isComplete = newWatchTime >= selectedModule.duration;
 
-        // Update selectedModule and modules
         const updatedModule = {
           ...selectedModule,
           watchTime: newWatchTime,
@@ -170,27 +168,27 @@ const TrainingPlayer: React.FC = () => {
     }
   };
 
-const handleClose = async () => {
-  if (selectedModule) {
-    const watchedSeconds = audioRef.current
-      ? Math.floor(audioRef.current.currentTime)
-      : currentTime;
+  const handleClose = async () => {
+    if (selectedModule) {
+      const watchedSeconds = audioRef.current
+        ? Math.floor(audioRef.current.currentTime)
+        : currentTime;
 
-    if (navigator.onLine && token && !selectedModule.isComplete) {
-      setIsSaving(true);
-      try {
-        await updateProgress(selectedModule.moduleId, watchedSeconds);
-        toast.success("Progress saved successfully!");
-      } catch (error) {
-        console.error("Failed to save progress on close:", error);
-        toast.error("Failed to save progress. Please try again.");
-      } finally {
-        setIsSaving(false);
+      if (navigator.onLine && token && !selectedModule.isComplete) {
+        setIsSaving(true);
+        try {
+          await updateProgress(selectedModule.moduleId, watchedSeconds);
+          toast.success("Progress saved successfully!");
+        } catch (error) {
+          console.error("Failed to save progress on close:", error);
+          toast.error("Failed to save progress. Please try again.");
+        } finally {
+          setIsSaving(false);
+        }
       }
+      navigate("/training");
     }
-    navigate("/training"); // Navigate to the training list
-  }
-};
+  };
 
   const handleNextModule = () => {
     if (selectedModule && modules.length > 0) {
@@ -279,7 +277,7 @@ const handleClose = async () => {
           >
             <audio
               ref={audioRef}
-              src={`https://brm-partners.britam.com${selectedModule.filePath}?v=${selectedModule.updateDate || Date.now()}`}
+              src={`${import.meta.env.VITE_API_TARGET}${selectedModule.filePath}?v=${selectedModule.updateDate || Date.now()}`}
               onLoadedMetadata={(e) => {
                 e.currentTarget.currentTime = selectedModule.watchTime || 0;
                 setCurrentTime(selectedModule.watchTime || 0);
@@ -287,7 +285,7 @@ const handleClose = async () => {
               }}
               onTimeUpdate={(e) => {
                 const time = Math.floor(e.currentTarget.currentTime);
-                setCurrentTime(time); // Update currentTime as the user seeks or plays
+                setCurrentTime(time);
                 console.log(`Listening at ${formatTime(time)}`);
                 console.log("🎯 Selected module:", selectedModule);
               }}
@@ -329,21 +327,6 @@ const handleClose = async () => {
                 Progress: {formatTime(currentTime)} / {formatTime(selectedModule.duration)}
               </Typography>
               <Typography>Status: {selectedModule.status}</Typography>
-              {/* {selectedModule.isComplete && (
-                <Button
-                  variant="contained"
-                  startIcon={<FaArrowRight />}
-                  onClick={handleNextModule}
-                  disabled={
-                    modules.findIndex(
-                      (m) => m.moduleId > selectedModule.moduleId && !m.isComplete
-                    ) === -1
-                  }
-                  sx={{ mt: 2 }}
-                >
-                  Next Module
-                </Button>
-              )} */}
               {isSaving && (
                 <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <CircularProgress size={24} sx={{ mr: 1 }} />
