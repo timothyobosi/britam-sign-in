@@ -44,15 +44,6 @@ const MainRoutes = {
         // Training module routes
         {
             path: '/training', // Route for the modules list
-            element: <TrainingAudioCard isLoading={false} />
-        },
-        {
-            path: '/training/:moduleId', // Route for individual module views
-            element: <TrainingAudioCard isLoading={false} />
-        },
-        // Training module routes
-        {
-            path: '/training', // Route for the modules list
             element: <TrainingList />
         },
         {

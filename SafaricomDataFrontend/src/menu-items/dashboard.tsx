@@ -41,15 +41,16 @@ const dashboard = {
             url: '/dashboard/certificate',
             icon: icons.IconCertificates,
             breadcrumbs: false
-        },
-        {
-            id: 'training',
-            title: 'Training Modules',
-            type: 'item',
-            url: '/training', // Points to the training list route
-            icon: icons.IconDashboard,
-            breadcrumbs: false
         }
+        // ,
+        // {
+        //     id: 'training',
+        //     title: 'Training Modules',
+        //     type: 'item',
+        //     url: '/training', // Points to the training list route
+        //     icon: icons.IconDashboard,
+        //     breadcrumbs: false
+        // }
     ]
 };
 

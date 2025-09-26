@@ -188,10 +188,9 @@ const handleClose = async () => {
         setIsSaving(false);
       }
     }
-    navigate("/training");
+    navigate("/training"); // Navigate to the training list
   }
 };
-
 
   const handleNextModule = () => {
     if (selectedModule && modules.length > 0) {
@@ -265,7 +264,7 @@ const handleClose = async () => {
                 onClick={() => { setAudioError(null); navigate('/training'); }}
                 sx={{ mt: 1 }}
               >
-                Get back to Course Outline
+                Get back to Training audio lessons
               </Button>
             )}
           </Box>
