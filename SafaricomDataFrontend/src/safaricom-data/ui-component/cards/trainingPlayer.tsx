@@ -169,10 +169,10 @@ const TrainingPlayer: React.FC = () => {
   };
 
   const handleClose = async () => {
-    if (selectedModule) {
-      const watchedSeconds = audioRef.current
-        ? Math.floor(audioRef.current.currentTime)
-        : currentTime;
+    if (selectedModule && audioRef.current) {
+      // Stop the audio immediately
+      audioRef.current.pause();
+      const watchedSeconds = Math.floor(audioRef.current.currentTime);
 
       if (navigator.onLine && token && !selectedModule.isComplete) {
         setIsSaving(true);
@@ -186,6 +186,7 @@ const TrainingPlayer: React.FC = () => {
           setIsSaving(false);
         }
       }
+      // Navigate after saving (or if offline)
       navigate("/training");
     }
   };
