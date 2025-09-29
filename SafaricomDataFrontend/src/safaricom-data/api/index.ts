@@ -1,6 +1,7 @@
 import { QuizQuestion, QuizScoreResponse, SubmitQuizAnswer, TrainingModule, LoginResponse } from './types';
 
-export const QUIZ_BASE_URL = `${import.meta.env.VITE_API_TARGET}/api/Quiz`;
+export const API_TARGET = import.meta.env.VITE_API_TARGET;
+export const QUIZ_BASE_URL = `${API_TARGET}/api/Quiz`;
 
 export async function getFinalScore(token: string): Promise<any> {
     const res = await fetch(`${QUIZ_BASE_URL}/final-score`, {
