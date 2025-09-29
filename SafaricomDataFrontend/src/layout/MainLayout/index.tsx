@@ -67,7 +67,7 @@ const MainLayout = () => {
                     <Outlet />
                 </Container>
             </MainContentStyled>
-            <Customization />
+            {/* <Customization /> */}
         </Box>
     );
 };
