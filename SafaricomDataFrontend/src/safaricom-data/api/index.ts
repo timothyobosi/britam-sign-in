@@ -54,6 +54,9 @@ export async function getCertificate(token: string): Promise<Blob> {
     
     if (!resPdf.ok) {
         const errorText = await resPdf.text();
+        if (resPdf.status === 404) {
+            throw new Error('Certificate file not found');
+        }
         throw new Error(`Failed to fetch PDF: HTTP error! status: ${resPdf.status} - ${errorText}`);
     }
     

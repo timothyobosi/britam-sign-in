@@ -11,6 +11,7 @@ const CertificateTab: React.FC = () => {
   const [certificateUrl, setCertificateUrl] = useState<string | null>(null);
   const [openPopup, setOpenPopup] = useState(false); // Popup for failed score
   const [openProcessingPopup, setOpenProcessingPopup] = useState(false); // Popup for certificate processing
+  const [processingMessage, setProcessingMessage] = useState('Kindly wait as we process your certificate.'); // Dynamic message
 
   useEffect(() => {
     if (!token) return;
@@ -41,7 +42,8 @@ const CertificateTab: React.FC = () => {
       document.body.removeChild(link);
     } catch (err: any) {
       console.error('Certificate fetch error:', err);
-      if (err.message.includes('No certificate found for the agent')) {
+      if (err.message === 'No certificate found for the agent' || err.message === 'Certificate file not found') {
+        setProcessingMessage('Please wait while we process your certificate.');
         setOpenProcessingPopup(true);
       } else {
         setError('Failed to fetch certificate: ' + err.message);
@@ -57,6 +59,7 @@ const CertificateTab: React.FC = () => {
 
   const handleCloseProcessingPopup = () => {
     setOpenProcessingPopup(false);
+    setProcessingMessage('Kindly wait as we process your certificate.'); // Reset to default message
   };
 
   return (
@@ -102,7 +105,7 @@ const CertificateTab: React.FC = () => {
         <DialogTitle>Certificate Processing</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Kindly wait as we process your certificate.
+            {processingMessage}
           </DialogContentText>
         </DialogContent>
         <DialogActions>

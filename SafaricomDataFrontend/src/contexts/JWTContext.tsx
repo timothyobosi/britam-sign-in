@@ -120,7 +120,27 @@ export const JWTProvider = ({ children }) => {
     init();
   }, []);
 
-  // Add session expiration check
+  // Add Axios response interceptor for handling 401 errors
+  useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      (response) => response, // Pass through successful responses
+      (error) => {
+        if (error.response?.status === 401) {
+          console.log('Received 401 Unauthorized, logging out...');
+          toast.error('Your session has expired. Please log in again.');
+          logout();
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    // Cleanup interceptor on component unmount
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
+  }, []); // Empty dependency array to set up interceptor once
+
+  // Session expiration check
   useEffect(() => {
     let timer: NodeJS.Timeout;
     const checkSessionExpiration = () => {
@@ -134,6 +154,7 @@ export const JWTProvider = ({ children }) => {
 
           if (timeLeft <= 0) {
             console.log('Session has expired, logging out...');
+            toast.error('Your session has expired. Please log in again.');
             logout(); // Trigger logout if expired
           } else {
             // Set a timer to check again 5 minutes before expiration
@@ -143,6 +164,7 @@ export const JWTProvider = ({ children }) => {
           }
         } catch (err) {
           console.error('Error decoding token for expiration check:', err);
+          toast.error('Invalid session detected. Please log in again.');
           logout(); // Logout on decode failure to be safe
         }
       }
@@ -153,7 +175,7 @@ export const JWTProvider = ({ children }) => {
     }
 
     return () => clearTimeout(timer); // Cleanup timer on unmount or state change
-  }, [state.isLoggedIn]); // Re-run when login state changes
+  }, [state.isLoggedIn]);
 
   const login = async (email: string, password: string) => {
     try {
