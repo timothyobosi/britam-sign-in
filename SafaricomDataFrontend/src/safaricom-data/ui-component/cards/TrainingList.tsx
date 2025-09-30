@@ -30,9 +30,18 @@ const formatTime = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
+// Greeting helper function
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
 const TrainingList: React.FC = () => {
   const jwtContext = React.useContext(JWTContext);
   const agentId = jwtContext?.user?.agentId;
+  const userName = jwtContext?.user?.name || 'User';
   const token = localStorage.getItem('serviceToken');
   const theme = useTheme();
   const navigate = useNavigate();
@@ -109,58 +118,114 @@ const TrainingList: React.FC = () => {
   }
 
   return (
-    <MainCard border={false} content={false} sx={{ minHeight: '300px', height: 'auto', maxWidth: '100%', overflow: 'visible', [theme.breakpoints.down('sm')]: { minHeight: '200px', padding: 1 } }}>
-      <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', backgroundColor: theme.palette.grey[100] }}>
-        {audioError ? (
-          <Box sx={{ textAlign: 'center' }}>
-            <Typography color="error" align="center" sx={{ mb: 2 }}>
-              {audioError}
-            </Typography>
-            <Button
-              variant="contained"
-              onClick={() => { setAudioError(null); window.location.reload(); }}
-              sx={{ mt: 1 }}
-            >
-              Retry
-            </Button>
-          </Box>
-        ) : (
-          <Grid container spacing={2}>
-            {modules.length > 0 ? modules.map((module) => (
-              <Grid item xs={12} sm={6} md={3} key={`module-${module.moduleId || module.title}`}>
-                {module.moduleId ? (
-                  <MainCard
-                    title={`Lesson ${module.moduleId} - ${module.title || 'Untitled'}`}
-                    sx={{ cursor: 'pointer', border: '1px solid', borderColor: theme.palette.divider, backgroundColor: '#fff', transition: 'background 0.2s', '&:hover': { backgroundColor: theme.palette.action.hover } }}
-                    onClick={() => handleModuleSelect(module)}
-                  >
-                    <Typography variant="h6">{module.title || 'Untitled'}</Typography>
-                    <Typography>Duration: {formatTime(module.duration)}</Typography>
-                    <Typography>Watch Time: {formatTime(module.watchTime)}</Typography>
-                    <Typography>Status: {module.status || 'Not Started'}</Typography>
-                    {module.isComplete && <Typography color="success.main">Completed!</Typography>}
-                  </MainCard>
-                ) : <Typography color="error">Invalid module data</Typography>}
-              </Grid>
-            )) : (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '100%',
-                  minHeight: '300px',
-                }}
+    <>
+      {/* Greeting Card */}
+      <MainCard
+        border={false}
+        sx={{
+          mb: theme.spacing(1.4),
+          px: theme.spacing(4), // Increased horizontal padding
+          py: theme.spacing(2), // Added vertical padding
+          mx: { xs: 2, sm: 3 }, // Responsive horizontal margin  //mx: { xs: 2, sm: 3 }
+          backgroundColor: 'white',
+          color: theme.palette.grey[700], // Adjusted for better contrast
+          borderRadius: theme.shape.borderRadius
+        }}
+      >
+        <Typography variant="h4" sx={{ mb: theme.spacing(1) }}>
+          {getGreeting()}, {userName} 👋
+        </Typography>
+        <Typography variant="body1" sx={{ mt: theme.spacing(1) }}>
+          Welcome back to your training dashboard. Continue where you left off below!
+        </Typography>
+      </MainCard>
+
+      {/* Lessons */}
+      <MainCard
+        border={false}
+        content={false}
+        sx={{
+          minHeight: '300px',
+          height: 'auto',
+          maxWidth: '100%',
+          overflow: 'visible',
+          [theme.breakpoints.down('sm')]: { minHeight: '200px', padding: theme.spacing(1) },
+          mx: { xs: theme.spacing(2), sm: theme.spacing(3) }, // Matching greeting card margins
+          borderRadius: theme.shape.borderRadius
+        }}
+      >
+        <Box
+          sx={{
+            p: theme.spacing(3), // Consistent padding
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: theme.palette.grey[100],
+            borderRadius: theme.shape.borderRadius,
+          }}
+        >
+          {audioError ? (
+            <Box sx={{ textAlign: 'center', px: theme.spacing(2) }}>
+              <Typography color="error" align="center" sx={{ mb: theme.spacing(2) }}>
+                {audioError}
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => { setAudioError(null); window.location.reload(); }}
+                sx={{ mt: theme.spacing(1) }}
               >
-                <Typography variant="h5" sx={{ mt: 2, color: theme.palette.text.primary }}>
-                  No Audio Lessons Available
-                </Typography>
-              </Box>
-            )}
-          </Grid>
-        )}
-      </Box>
+                Retry
+              </Button>
+            </Box>
+          ) : (
+            <Grid container spacing={theme.spacing(2)}>
+              {modules.length > 0 ? modules.map((module) => (
+                <Grid item xs={12} sm={6} md={3} key={`module-${module.moduleId || module.title}`}>
+                  {module.moduleId ? (
+                    <MainCard
+                      title={`Lesson ${module.moduleId} - ${module.title || 'Untitled'}`}
+                      sx={{
+                        cursor: 'pointer',
+                        border: `1px solid ${theme.palette.divider}`,
+                        backgroundColor: '#fff',
+                        transition: 'background 0.2s',
+                        '&:hover': { backgroundColor: theme.palette.action.hover },
+                        p: theme.spacing(2), // Added padding inside module cards
+                      }}
+                      onClick={() => handleModuleSelect(module)}
+                    >
+                      <Typography variant="h6" sx={{ mb: theme.spacing(1) }}>{module.title || 'Untitled'}</Typography>
+                      <Typography sx={{ mb: theme.spacing(0.5) }}>Duration: {formatTime(module.duration)}</Typography>
+                      <Typography sx={{ mb: theme.spacing(0.5) }}>Watch Time: {formatTime(module.watchTime)}</Typography>
+                      <Typography>Status: {module.status || 'Not Started'}</Typography>
+                      {module.isComplete && <Typography color="success.main">Completed!</Typography>}
+                    </MainCard>
+                  ) : <Typography color="error">Invalid module data</Typography>}
+                </Grid>
+              )) : (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '100%',
+                    minHeight: '300px',
+                    px: theme.spacing(2), // Added horizontal padding
+                  }}
+                >
+                  <Typography variant="h5" sx={{ mt: theme.spacing(2), color: theme.palette.text.primary }}>
+                    No Audio Lessons Available
+                  </Typography>
+                </Box>
+              )}
+            </Grid>
+          )}
+        </Box>
+      </MainCard>
+
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
         <DialogTitle>Notice</DialogTitle>
         <DialogContent>
@@ -172,7 +237,7 @@ const TrainingList: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </MainCard>
+    </>
   );
 };
 

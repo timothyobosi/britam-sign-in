@@ -163,8 +163,8 @@ const ProfileSection = () => {
           <Avatar
             {...stringAvatar(user?.name || 'Unknown User')}
             sx={{
-              ...theme.typography.mediumAvatar,
-              margin: '8px 0 8px 8px !important',
+              ...theme.typography.h4,
+              margin: 'px 0 8px 8px !important',
               cursor: 'pointer'
             }}
             ref={anchorRef}

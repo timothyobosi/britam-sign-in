@@ -73,7 +73,7 @@ const Login = () => {
                                                 variant="subtitle1"
                                                 sx={{ textDecoration: 'none' }}
                                             >
-                                                Don&apos;t have an account?Whh
+                                                {/* Don&apos;t have an account? */}
                                             </Typography>
                                         </Grid>
                                     </Grid>
